@@ -1,0 +1,26 @@
+name: build
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Build the app
+        run: dotnet build app/Mastermind.csproj -c Release
+      - name: Build and smoke-test the extension
+        working-directory: extension
+        run: |
+          npm ci
+          npm run build
+          node smoke.js

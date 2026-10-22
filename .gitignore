@@ -1,0 +1,10 @@
+bin/
+obj/
+out/
+tmp/
+node_modules/
+extension/out/
+extension/bin/
+extension/LICENSE
+*.vsix
+Mastermind.exe

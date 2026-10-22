@@ -1,0 +1,363 @@
+{
+  "name": "mastermind",
+  "displayName": "Agent Mastermind",
+  "publisher": "eventigizer",
+  "description": "A desk for your Claude Code agents: who needs you, in every VS Code window.",
+  "version": "0.3.0",
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "smoke": "node smoke.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.101.0",
+    "typescript": "^5.6.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "mastermind.start",
+        "title": "Start",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.show",
+        "title": "Show the panel",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.watch",
+        "title": "Watch this project",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.unwatch",
+        "title": "Stop watching this project",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.handoffs.use",
+        "title": "Use handoffs in this project",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.handoffs.stop",
+        "title": "Stop using handoffs here",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.projects",
+        "title": "Projects",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.promptItem",
+        "title": "New Claude session on this file",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.applyProposal",
+        "title": "Apply",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.health.free",
+        "title": "Free the worst memory offender",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.health.restart",
+        "title": "Restart a language server",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.health.reloadWebviews",
+        "title": "Reload this window's Claude panels",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.health.reloadWindow",
+        "title": "Reload this window",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.health.debugPortStep",
+        "title": "Set up the debug port",
+        "category": "Mastermind"
+      },
+      {
+        "command": "mastermind.dev.call",
+        "title": "Run the platform check's call file",
+        "category": "Mastermind"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "mastermind.promptItem",
+          "when": "resourceScheme == file && resourcePath in mastermind.promptFiles",
+          "group": "z_mastermind"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mastermind.applyProposal",
+          "when": "resourceScheme == mastermind-proposal",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mastermind.promptItem",
+          "when": "false"
+        },
+        {
+          "command": "mastermind.applyProposal",
+          "when": "false"
+        },
+        {
+          "command": "mastermind.health.restart",
+          "when": "false"
+        },
+        {
+          "command": "mastermind.health.reloadWebviews",
+          "when": "false"
+        },
+        {
+          "command": "mastermind.health.reloadWindow",
+          "when": "false"
+        },
+        {
+          "command": "mastermind.health.debugPortStep",
+          "when": "false"
+        },
+        {
+          "command": "mastermind.dev.call",
+          "when": "mastermind.dev"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Agent Mastermind",
+      "properties": {
+        "mastermind.hookPort": {
+          "type": "integer",
+          "default": 7778,
+          "minimum": 1,
+          "maximum": 65535,
+          "scope": "application",
+          "description": "The port Mastermind listens on for hook events and for its VS Code windows. A port Mastermind cannot listen on is refused with a warning. A change restarts Mastermind and moves the hook entries of every project watched from here; a manifest's projects move when whatever writes it runs again."
+        },
+        "mastermind.debugPort": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 65535,
+          "scope": "application",
+          "description": "VS Code's remote-debugging-port (argv.json), which the panel's send, allow / deny and archive actions and VS Code health's Claude-panel memory reading drive; 0 = off. The walkthrough sets it up."
+        },
+        "mastermind.startAtLogin": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Start Mastermind when you log in to Windows — on this machine only; Settings Sync never carries it."
+        },
+        "mastermind.newDispatchAutoAllow": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "A `new` dispatch from the panel starts its agent with auto-allow on."
+        },
+        "mastermind.relay": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Mastermind moves handoffs between projects (the relay)."
+        },
+        "mastermind.askToStart": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "A window that opens with no Mastermind running asks to start it."
+        },
+        "mastermind.exePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Mastermind.exe's full path on this machine."
+        },
+        "mastermind.promptItem": {
+          "type": "object",
+          "default": {
+            "include": "",
+            "exclude": "",
+            "template": ""
+          },
+          "properties": {
+            "include": {
+              "type": "string",
+              "description": "Glob of the files the item shows on, from each workspace folder, e.g. docs/*.md — the folders before the first wildcard are the only ones searched."
+            },
+            "exclude": {
+              "type": "string",
+              "description": "Glob of the files left out, matched against each file's path under the include's fixed folder, where the search runs — start it with **/ to match at any depth, e.g. **/archive.md."
+            },
+            "template": {
+              "type": "string",
+              "description": "The prompt typed into the new session, unsent; {path} is the file's workspace-relative path."
+            }
+          },
+          "additionalProperties": false,
+          "scope": "application",
+          "markdownDescription": "The explorer's right-click item: a new Claude session with `template` typed in, unsent, on files matching `include` minus `exclude`. An empty `include` shows no item."
+        },
+        "mastermind.health.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "VS Code health: a status-bar item in each window shows its TypeScript, ESLint and Angular servers' and its Claude panel's memory past their warning share, a server in its error band restarts on its own, and Mastermind's tray marks a window in its error band."
+        },
+        "mastermind.health.typescript.warningPercent": {
+          "type": "integer",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of the TypeScript server's heap cap from which the health item shows it."
+        },
+        "mastermind.health.typescript.errorPercent": {
+          "type": "integer",
+          "default": 75,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of the TypeScript server's heap cap from which the item turns red, the tray marks this window and an automatic restart becomes due."
+        },
+        "mastermind.health.typescript.autoRestart": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Restart the TypeScript server on its own in its error band, once no file has been opened, changed or closed for the quiet wait; at most once per cooldown."
+        },
+        "mastermind.health.eslint.warningPercent": {
+          "type": "integer",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of the ESLint server's heap cap from which the health item shows it."
+        },
+        "mastermind.health.eslint.errorPercent": {
+          "type": "integer",
+          "default": 75,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of the ESLint server's heap cap from which the item turns red, the tray marks this window and an automatic restart becomes due."
+        },
+        "mastermind.health.eslint.autoRestart": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Restart the ESLint server on its own in its error band, once no file has been opened, changed or closed for the quiet wait; at most once per cooldown."
+        },
+        "mastermind.health.angular.warningPercent": {
+          "type": "integer",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of the Angular server's heap cap from which the health item shows it."
+        },
+        "mastermind.health.angular.errorPercent": {
+          "type": "integer",
+          "default": 75,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of the Angular server's heap cap from which the item turns red, the tray marks this window and an automatic restart becomes due."
+        },
+        "mastermind.health.angular.autoRestart": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Restart the Angular server on its own in its error band, once no file has been opened, changed or closed for the quiet wait; at most once per cooldown."
+        },
+        "mastermind.health.panel.warningPercent": {
+          "type": "integer",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of a Claude panel's heap cap — measured on this PC — read over the debug port, from which the health item shows it."
+        },
+        "mastermind.health.panel.errorPercent": {
+          "type": "integer",
+          "default": 75,
+          "minimum": 1,
+          "maximum": 100,
+          "scope": "application",
+          "description": "Share of a Claude panel's heap cap — measured on this PC — read over the debug port, from which the item turns red and the tray marks this window. The panel never reloads on its own."
+        },
+        "mastermind.health.quietSeconds": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 5,
+          "scope": "application",
+          "description": "How long no file may be opened, changed or closed before a server in its error band restarts on its own — a restart mid-load orphans its loading indicator."
+        },
+        "mastermind.health.cooldownMinutes": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "scope": "application",
+          "description": "The least time between two automatic restarts of one server."
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "setup",
+        "title": "Set up Agent Mastermind",
+        "description": "Start Mastermind, and turn on the debug port if you want the panel's send, allow / deny and archive actions.",
+        "steps": [
+          {
+            "id": "start",
+            "title": "Start Mastermind",
+            "description": "Mastermind runs as its own app beside VS Code — the tray icon, the panel, and the badge in every window.\n[Start Mastermind](command:mastermind.start)",
+            "media": {
+              "markdown": "media/start.md"
+            },
+            "completionEvents": [
+              "onCommand:mastermind.start"
+            ]
+          },
+          {
+            "id": "debugPort",
+            "title": "Turn on the debug port (optional)",
+            "description": "The panel's send, allow / deny and archive, and each window's Claude-panel memory reading, drive VS Code through its debug port — and so can any local process, which is fine on a machine only you use. Add \"remote-debugging-port\": \"9222\" to argv.json, set Mastermind's Debug Port to 9222, then quit every VS Code window and reopen.\n[Open argv.json](command:workbench.action.configureRuntimeArguments)\n[Open the Debug Port setting](command:workbench.action.openSettings?%5B%22mastermind.debugPort%22%5D)",
+            "media": {
+              "markdown": "media/debug-port.md"
+            },
+            "completionEvents": [
+              "onContext:mastermind.debugPortReady"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

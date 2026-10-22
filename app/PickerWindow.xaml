@@ -1,0 +1,100 @@
+<Window x:Class="Mastermind.PickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Width="680" Height="440" MinHeight="300"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="False"
+        Background="Transparent" ShowInTaskbar="False" WindowStartupLocation="Manual"
+        FontFamily="{StaticResource Sans}" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+
+  <!-- The confirm-before-send picker: one click SELECTS and arms a row; a second click on it, Send or Enter acts; any
+       click outside closes it.
+       Full monitor height, fixed width (PlaceNear), no drag. Borderless dark shell (WindowChrome + DWM dark/rounded
+       in code-behind) with an OPAQUE surface: the glass frame shows whatever sits behind through any alpha, and the
+       cards bled through the list. Items render through a TextBlock template — never a MenuItem header, whose
+       access-key parsing ate the first underscore of every label. -->
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="0" GlassFrameThickness="-1"
+                        CornerRadius="0" ResizeBorderThickness="0" UseAeroCaptionButtons="False"/>
+  </shell:WindowChrome.WindowChrome>
+
+  <Border CornerRadius="8" Background="#FF1A1B22" BorderThickness="1" BorderBrush="#33FFFFFF" SnapsToDevicePixels="True">
+    <Grid Margin="16,12,16,14">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>   <!-- 0 title -->
+        <RowDefinition Height="Auto"/>   <!-- 1 filter -->
+        <RowDefinition Height="*"/>      <!-- 2 list | full text -->
+        <RowDefinition Height="Auto"/>   <!-- 3 cancel / act -->
+      </Grid.RowDefinitions>
+
+      <TextBlock x:Name="TitleText" Grid.Row="0" FontFamily="{StaticResource Display}" FontSize="15"
+                 FontWeight="SemiBold" Foreground="{StaticResource TextHi}" TextTrimming="CharacterEllipsis"/>
+
+      <Grid Grid.Row="1" Margin="0,10,0,8">
+        <TextBox x:Name="Filter" Background="#14FFFFFF" Foreground="{StaticResource TextHi}"
+                 CaretBrush="{StaticResource TextHi}" BorderBrush="#26FFFFFF" BorderThickness="1"
+                 Padding="7,5" FontSize="12" TextChanged="Filter_TextChanged" PreviewKeyDown="Filter_PreviewKeyDown"/>
+        <TextBlock x:Name="Placeholder" Text="type to filter — click a row twice, or ↑ ↓ then Enter — Esc to cancel"
+                   Foreground="{StaticResource TextLo}" FontSize="12" Margin="10,0,0,0"
+                   VerticalAlignment="Center" IsHitTestVisible="False"/>
+      </Grid>
+
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="260"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <ListBox x:Name="ItemList" Grid.Column="0" Background="#0DFFFFFF" BorderThickness="0" Padding="2"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="List_SelectionChanged">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" TextWrapping="Wrap" FontSize="12"/>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+          <ListBox.ItemContainerStyle>
+            <Style TargetType="ListBoxItem">
+              <!-- Click selects + arms; a second click on the armed row acts (Item_PreviewMouseLeftButtonUp). Preview
+                   (tunnelling): the item's own mouse handling never gets to swallow it. -->
+              <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Item_PreviewMouseLeftButtonUp"/>
+              <Setter Property="Foreground" Value="{StaticResource TextMid}"/>
+              <Setter Property="Padding" Value="8,5"/>
+              <Setter Property="Margin" Value="0,0,0,1"/>
+              <Setter Property="Cursor" Value="Hand"/>
+              <Setter Property="Template">
+                <Setter.Value>
+                  <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="bg" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                      <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="bg" Property="Background" Value="#16FFFFFF"/>
+                        <Setter Property="Foreground" Value="{StaticResource TextHi}"/>
+                      </Trigger>
+                      <Trigger Property="IsSelected" Value="True">
+                        <Setter TargetName="bg" Property="Background" Value="#40D97757"/>
+                        <Setter Property="Foreground" Value="{StaticResource TextHi}"/>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
+            </Style>
+          </ListBox.ItemContainerStyle>
+        </ListBox>
+        <TextBox x:Name="Preview" Grid.Column="1" Margin="12,0,0,0" IsReadOnly="True" IsTabStop="False"
+                 TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                 Background="#0DFFFFFF" Foreground="{StaticResource TextMid}" BorderThickness="0"
+                 Padding="10,8" FontSize="12"/>
+      </Grid>
+
+      <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <Button Content="Cancel" IsCancel="True" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                Click="Cancel_Click"/>
+        <Button x:Name="ActionButton" IsDefault="True" IsEnabled="False" Style="{StaticResource GhostButton}"
+                Foreground="{StaticResource Accent}" FontWeight="SemiBold" Click="Action_Click"/>
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

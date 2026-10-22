@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in Mastermind or its VS Code extension does not work
+labels: [bug]
+body:
+  - type: input
+    id: mastermind
+    attributes:
+      label: Agent Mastermind version
+      description: The extension's version, in the Extensions view
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: editor
+    attributes:
+      label: Editor and its version
+      placeholder: "VS Code 1.142.0"
+    validations:
+      required: true
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code extension version
+      placeholder: "2.1.304"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The activity log's lines around it
+      description: The strip at the bottom of Mastermind's panel, or mastermind_activity.log in %LOCALAPPDATA%\Mastermind. Take out anything private first.
+      render: text
+    validations:
+      required: true

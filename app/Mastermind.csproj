@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>annotations</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Mastermind</AssemblyName>
+    <RootNamespace>Mastermind</RootNamespace>
+    <StartupObject>Mastermind.Program</StartupObject>
+    <Version>1.0.0</Version>
+    <Company>Eventigizer</Company>
+    <Product>Agent Mastermind</Product>
+    <ApplicationIcon>mastermind.ico</ApplicationIcon>
+    <!-- Keep the warning noise down; this is a small utility, not a library. -->
+    <NoWarn>CA1416;CS8002</NoWarn>
+  </PropertyGroup>
+
+  <!-- Publish defaults (publish.bat overrides on the command line too). -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Read the VS Code extension's hiddenSessionIds out of state.vscdb (SQLite). -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tray icon — Mastermind's cobweb (make_mastermind_icon.py draws it), embedded so the single-file exe carries
+         it (no runtime fetch). The same file is the exe's ApplicationIcon. -->
+    <EmbeddedResource Include="mastermind.ico" />
+    <!-- The Claude health check's prompt — the text used whenever health_check.md is missing beside prompts.json, and
+         what "Edit this prompt…" writes there first. -->
+    <EmbeddedResource Include="health_check.md" />
+    <!-- The two handoff skills an install writes into a project's .claude/skills/ (HandoffSkills.cs), the writer's
+         address book filled in at each write. Plain project skills, never a plugin: a project's skills-directory
+         plugin loads only where ~/.claude.json trusts the exact key of its git root, which the VS Code extension never
+         writes. Never under a .claude folder here — the exe writes each installed copy. -->
+    <EmbeddedResource Include="skills\handoff.SKILL.md" LogicalName="Mastermind.skills.handoff.SKILL.md" />
+    <EmbeddedResource Include="skills\process.SKILL.md" LogicalName="Mastermind.skills.process.SKILL.md" />
+  </ItemGroup>
+
+</Project>
