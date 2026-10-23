@@ -32,7 +32,7 @@ internal static class EditorIdentities
     private const int SeenDays = 14;   // an editor stays in play this long after its last window connected
     private static readonly object _lock = new();
     private static readonly ConcurrentDictionary<int, EditorIdentity> _byHost = new();
-    private static readonly ConcurrentDictionary<int, List<string>> _foldersByHost = new();   // path keys
+    private static readonly ConcurrentDictionary<int, IReadOnlyList<string>> _foldersByHost = new();   // path keys
     private static List<EditorIdentity> _seen;   // under _lock
 
     private static EditorIdentity Configured => new()
@@ -112,15 +112,14 @@ internal static class EditorIdentities
     public static EditorIdentity ForHost(int hostPid) =>
         Config.Current.EditorSet ? Configured : _byHost.TryGetValue(hostPid, out var e) ? e : All()[0];
 
-    /// <summary>The image name of the editor whose connected window holds this folder — a card's raise looks among
-    /// that editor's windows alone — or null when no connected window holds it.</summary>
+    /// <summary>The image name of the editor whose connected window holds this folder — the deepest-folder window's, as
+    /// a panel's placement picks it, so a dev host opened inside another window's folder is its own; a card's raise
+    /// looks among that editor's windows alone — or null when no connected window holds it or two hold it at that
+    /// depth.</summary>
     public static string ProcessNameFor(string cwd)
     {
-        var key = Paths.Key(cwd ?? "");
-        if (key.Length == 0) return null;
-        foreach (var (host, roots) in _foldersByHost)
-            if (roots.Any(root => Paths.Within(key, root))) return ForHost(host).ProcessName;
-        return null;
+        int host = Paths.DeepestHolder(cwd, _foldersByHost);
+        return host != 0 ? ForHost(host).ProcessName : null;
     }
 
     /// <summary>The command-line tool a file opens with: config's when the file sets it, else a connected window's full

@@ -4,9 +4,11 @@ on:
     tags: ['v*']
 permissions:
   contents: write
+  id-token: write   # the Marketplace sign-in: the Entra app trusts this repo's release environment, no stored token
 jobs:
   package:
     runs-on: windows-latest
+    environment: release
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -28,15 +30,21 @@ jobs:
           if ($LASTEXITCODE -eq 0) { gh release upload $env:GITHUB_REF_NAME $packages --clobber }
           else { gh release create $env:GITHUB_REF_NAME $packages --title $env:GITHUB_REF_NAME --notes-file extension/CHANGELOG.md }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Sign in to Microsoft Entra
+        if: vars.PUBLISH == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: e9dab7d2-d979-4296-b40a-cc745a040ac3
+          tenant-id: 28c585e6-6dde-4f4e-aa91-407d3daf64b4
+          allow-no-subscriptions: true
       - name: Publish to the Marketplace and Open VSX
         if: vars.PUBLISH == 'true'
         working-directory: extension
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
           $packages = (Get-ChildItem ../out/*.vsix).FullName
-          npx vsce publish --packagePath $packages --skip-duplicate
+          npx vsce publish --packagePath $packages --skip-duplicate --azure-credential
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx ovsx publish --packagePath $packages --skip-duplicate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

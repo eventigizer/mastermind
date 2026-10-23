@@ -79,14 +79,15 @@ public partial class MainWindow : Window
         // The panel's floor, once laid out: its fixed rows — the band under the list counted at its full height whether
         // the big count or the log shows, since both can start hidden — and one whole card in the list, which keeps the
         // design height in normal mode. A window shorter than that grows upward, so one parked in a corner keeps its
-        // bottom edge on the screen.
+        // bottom edge on the screen — up to its monitor's work-area top, past which it grows down, so one saved near the
+        // top keeps its header, the drag handle, on the screen.
         Loaded += (_, _) =>
         {
             MinHeight = TitleBar.ActualHeight + ListScroller.Padding.Top + CardDesignHeight + CardGap + ListScroller.Padding.Bottom
                         + Math.Max(BigCount.Height, LogPanel.Height) + Footer.ActualHeight;
             if (!_full && Height < MinHeight)
             {
-                Top -= MinHeight - Height;
+                Top = Math.Max(Top - (MinHeight - Height), CurrentWorkArea().Top);
                 Height = MinHeight;
             }
         };
@@ -679,9 +680,17 @@ public partial class MainWindow : Window
         SaveWindowState();   // persist immediately — a toggle is a deliberate placement choice
     }
 
-    /// <summary>Size the window to the work area of the monitor it sits on (device px → DIPs through this window's
-    /// own transform, so a scaled monitor fills exactly).</summary>
+    /// <summary>Size the window to the work area of the monitor it sits on.</summary>
     private void FillCurrentMonitor()
+    {
+        var wa = CurrentWorkArea();
+        Left = wa.Left; Top = wa.Top;
+        Width = wa.Width; Height = wa.Height;
+    }
+
+    /// <summary>The work area of the monitor the window sits on, in DIPs (device px through this window's own
+    /// transform, so a scaled monitor measures exactly).</summary>
+    private Rect CurrentWorkArea()
     {
         var hwnd = new WindowInteropHelper(this).Handle;
         var wa = System.Windows.Forms.Screen.FromHandle(hwnd).WorkingArea; // device px
@@ -692,8 +701,7 @@ public partial class MainWindow : Window
             dx = src.CompositionTarget.TransformFromDevice.M11;
             dy = src.CompositionTarget.TransformFromDevice.M22;
         }
-        Left = wa.Left * dx; Top = wa.Top * dy;
-        Width = wa.Width * dx; Height = wa.Height * dy;
+        return new Rect(wa.Left * dx, wa.Top * dy, wa.Width * dx, wa.Height * dy);
     }
 
     // Card design height (App.xaml CardHeight), the card's bottom margin, and the horizontal scrollbar's band —

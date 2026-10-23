@@ -387,16 +387,19 @@
                                  Visibility="{Binding DetailVisibility}"
                                  IsReadOnly="True" IsTabStop="False" Cursor="IBeam"
                                  BorderThickness="0" Background="Transparent" Padding="0" Margin="0"
-                                 Foreground="{Binding DetailBrush}" FontSize="12.5"
+                                 Foreground="{Binding DetailBrush}"
                                  TextWrapping="Wrap" AcceptsReturn="True"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                          <!-- A WORKING card's tool line in the mono face (AgentEvent.DetailIsTool); the font is never set
-                               locally here, which would outrank the trigger. -->
+                          <!-- A WORKING card's tool line in the mono face, a step smaller than the prose — glanced at,
+                               never read (AgentEvent.DetailIsTool); the font and its size are never set locally here,
+                               which would outrank the trigger. -->
                           <TextBox.Style>
                             <Style TargetType="TextBox">
+                              <Setter Property="FontSize" Value="12.5"/>
                               <Style.Triggers>
                                 <DataTrigger Binding="{Binding DetailIsTool}" Value="True">
                                   <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+                                  <Setter Property="FontSize" Value="11"/>
                                 </DataTrigger>
                               </Style.Triggers>
                             </Style>

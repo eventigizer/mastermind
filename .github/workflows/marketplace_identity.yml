@@ -1,0 +1,19 @@
+name: marketplace identity
+# One-off: signs in as the release's Entra app and prints the id the Marketplace knows it by, which the publisher's
+# Members page takes as a Contributor. Deleted once the app is a member.
+on: workflow_dispatch
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: e9dab7d2-d979-4296-b40a-cc745a040ac3
+          tenant-id: 28c585e6-6dde-4f4e-aa91-407d3daf64b4
+          allow-no-subscriptions: true
+      - name: Print the Marketplace member id
+        run: az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id -o tsv

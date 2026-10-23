@@ -283,17 +283,7 @@ internal static class HealthReader
     {
         int host = 0;
         if (!string.IsNullOrEmpty(p.Sid) && servers.HostBySession.TryGetValue(p.Sid, out var bySession)) host = bySession;
-        else if (string.IsNullOrEmpty(p.Sid) || !servers.LiveIds.Contains(p.Sid))
-        {
-            // A window opened inside another window's folder is the nearer match, so its folder wins there; each holding
-            // root is a prefix of the cwd's key, so the longer one is the deeper.
-            var key = Paths.Key(p.Cwd);
-            var holding = key.Length == 0
-                ? new List<(int Host, int Depth)>()
-                : hostFolders.Select(h => (Host: h.Key, Depth: h.Value.Select(Paths.Key).Where(f => Paths.Within(key, f)).Select(f => f.Length).DefaultIfEmpty(-1).Max()))
-                             .Where(h => h.Depth >= 0).OrderByDescending(h => h.Depth).ToList();
-            if (holding.Count == 1 || (holding.Count > 1 && holding[0].Depth > holding[1].Depth)) host = holding[0].Host;
-        }
+        else if (string.IsNullOrEmpty(p.Sid) || !servers.LiveIds.Contains(p.Sid)) host = Paths.DeepestHolder(p.Cwd, hostFolders);
         return host;
     }
 }

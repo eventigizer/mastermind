@@ -25,6 +25,19 @@ internal static class Paths
     public static bool Within(string key, string root) =>
         root.Length > 0 && (key == root || key.StartsWith(root + "/", StringComparison.Ordinal));
 
+    /// <summary>The owner whose root holding this path is the deepest — a window opened inside another window's folder
+    /// is the nearer match there — 0 when none holds it or two hold it at that depth. Roots are paths or keys.</summary>
+    public static int DeepestHolder(string path, IEnumerable<KeyValuePair<int, IReadOnlyList<string>>> rootsByOwner)
+    {
+        var key = Key(path);
+        if (key.Length == 0) return 0;
+        // Each holding root is a prefix of the key, so the longer one is the deeper.
+        var holding = rootsByOwner
+            .Select(o => (Owner: o.Key, Depth: o.Value.Select(Key).Where(r => Within(key, r)).Select(r => r.Length).DefaultIfEmpty(-1).Max()))
+            .Where(o => o.Depth >= 0).OrderByDescending(o => o.Depth).ToList();
+        return holding.Count == 1 || (holding.Count > 1 && holding[0].Depth > holding[1].Depth) ? holding[0].Owner : 0;
+    }
+
     /// <summary>Display-only last path segment, original case. Used for window-title scoring and the card's
     /// project label — never as an identity key.</summary>
     public static string Leaf(string path)
