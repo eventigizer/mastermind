@@ -7,8 +7,8 @@ namespace Mastermind;
 /// <summary>
 /// The one project list: the manifest's entries (root + routing token) merged with config's overrides, matched
 /// per project on the normalized root (<see cref="Paths.Key"/>). A config field that is set beats the manifest's, an
-/// unset one keeps it. Manifest projects keep the manifest's order — the card order and the chip colour slot — so an
-/// override never reorders the chips; config-only projects follow in config order. A card finds its entry by folder
+/// unset one keeps it. Manifest projects keep the manifest's order — the card order — so an override never reorders
+/// the cards; config-only projects follow in config order. A card finds its entry by folder
 /// name (<see cref="Paths.Leaf"/>), as the card order and the chips always have, so two checkouts sharing a folder
 /// name share an entry.
 /// </summary>
@@ -39,7 +39,7 @@ internal static class ProjectList
         }
     }
 
-    /// <summary>True once the snapshot came from a good read — a caller caching off it (the chip brushes) waits for it.</summary>
+    /// <summary>True once the snapshot came from a good read.</summary>
     public static bool SnapshotGood { get { lock (_snapLock) return _snapshot != null; } }
 
     /// <summary>The list re-read now — the relay's address book, re-read every tick so a manifest rewrite routes without a
@@ -99,7 +99,6 @@ internal static class ProjectList
             }
             if (!string.IsNullOrEmpty(o.Token)) e.Token = o.Token;
             if (o.Label != null) e.Label = o.Label;
-            if (o.Colour != null) e.Colour = o.Colour;
             if (o.Hide != null) e.Hide = o.Hide;
         }
         return list;
@@ -124,14 +123,14 @@ internal static class ProjectList
     public static bool IsHidden(string cwd) => ForLeaf(Paths.Leaf(cwd))?.Hide == true;
 
     /// <summary>One activity-log line: the list as the chips and the card order read it — position, the chip label (the
-    /// config label, else the token, else the folder), a config colour, hidden — so a restart's log shows what config
+    /// config label, else the token, else the folder), hidden — so a restart's log shows what config
     /// made of the manifest.</summary>
     public static string Describe()
     {
         var parts = Snapshot.Select((p, i) =>
         {
             var name = !string.IsNullOrEmpty(p.Label) ? p.Label : !string.IsNullOrEmpty(p.Token) ? p.Token : Paths.Leaf(p.Root);
-            return $"{i + 1} {name}" + (p.Colour != null ? $" {p.Colour}" : "") + (p.Hide == true ? " hidden" : "");
+            return $"{i + 1} {name}" + (p.Hide == true ? " hidden" : "");
         });
         return "projects · " + string.Join(", ", parts) + (SnapshotGood ? "" : " (manifest unreadable — retrying)");
     }

@@ -69,8 +69,8 @@ internal static class AutoAllowStore
         }
     }
 
-    /// <summary>A change a person or a dispatch made — the card's toggle, a new session's auto-allow, session restore's
-    /// re-arm — raised by <see cref="Set"/> alone, never by <see cref="Remove"/> or <see cref="Sweep"/>, so session
+    /// <summary>A change a person or a session start made — the card's toggle, a new session's auto-allow, session
+    /// restore's re-arm — raised by <see cref="Set"/> alone, never by <see cref="Remove"/> or <see cref="Sweep"/>, so session
     /// restore's record keeps the auto-allow a session had. Raised on the writer's thread, outside the lock.</summary>
     public static event Action<string, bool> Toggled;
 
@@ -80,7 +80,7 @@ internal static class AutoAllowStore
         if (Write(sessionId, on)) Toggled?.Invoke(sessionId, on);
     }
 
-    /// <summary>Auto-allow ON for a session started to run unattended — a dispatch under newDispatchAutoAllow, a session
+    /// <summary>Auto-allow ON for a session started to run unattended — a new session under newSessionAutoAllow, a session
     /// restore brings back — never in a hidden project, whose card never shows, so nothing could turn it off again.
     /// True when it was set.</summary>
     public static bool Arm(string sessionId, string cwd)

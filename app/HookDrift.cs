@@ -16,7 +16,6 @@ internal sealed class ProjectEntry
     // Config overrides only (config.json's projects) — the manifest carries root and token. Null = unset, so the
     // manifest's value stands (ProjectList's merge).
     [JsonPropertyName("label")]  public string Label  { get; set; }
-    [JsonPropertyName("colour")] public string Colour { get; set; }
     [JsonPropertyName("hide")]   public bool? Hide    { get; set; }
 }
 

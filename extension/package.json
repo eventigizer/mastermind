@@ -175,11 +175,11 @@
           "scope": "machine",
           "description": "Start Mastermind when you log in to Windows — on this machine only; Settings Sync never carries it."
         },
-        "mastermind.newDispatchAutoAllow": {
+        "mastermind.newSessionAutoAllow": {
           "type": "boolean",
           "default": false,
           "scope": "application",
-          "description": "A `new` dispatch from the panel starts its agent with auto-allow on."
+          "description": "Every Claude session starts with auto-allow on — a new one, a /clear's and a resumed one, unless you switched a resumed one off on its card. Needs Mastermind running when the session starts."
         },
         "mastermind.relay": {
           "type": "boolean",

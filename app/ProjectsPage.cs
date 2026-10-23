@@ -7,7 +7,7 @@ namespace Mastermind;
 /// "Mastermind: Projects" — the page's rows and its save. The rows are every project Mastermind knows: the
 /// manifest's and config's entries in the list's order, then each folder an open editor window holds and each running
 /// session's launch folder that no row already covers. A manifest project's order and routing code are the manifest's
-/// — the page shows them locked — while its name, colour and hide are config's, like any other project's. A save
+/// — the page shows them locked — while its name and hide are config's, like any other project's. A save
 /// replaces config's projects, every non-manifest row kept so its place holds, and restarts Mastermind as a settings
 /// change does.
 /// </summary>
@@ -28,7 +28,6 @@ internal static class ProjectsPage
                 ["name"] = Paths.Leaf(root),
                 ["token"] = p?.Token ?? "",
                 ["label"] = p?.Label ?? "",
-                ["colour"] = p?.Colour ?? "",
                 ["hide"] = p?.Hide == true,
                 ["manifest"] = fromManifest,
             });
@@ -43,9 +42,9 @@ internal static class ProjectsPage
     }
 
     /// <summary>The page's rows checked and written as config's projects: a non-manifest row keeps its place and its
-    /// code; a manifest row is written only when it sets a name, colour or hide. Refused, naming the row: a code outside
-    /// the grammar (PromptRoute's), a code another project holds — a manifest's included — a code cleared on a project
-    /// that uses handoffs, or a colour that is not #RRGGBB or is a reserved hue. The keys written, or why not.</summary>
+    /// code; a manifest row is written only when it sets a name or hide. Refused, naming the row: a code outside the
+    /// grammar (PromptRoute's), a code another project holds — a manifest's included — or a code cleared on a project
+    /// that uses handoffs. The keys written, or why not.</summary>
     public static (List<string> Keys, string Error) Save(JsonArray rows, Action<string> warn)
     {
         var (list, manifest, failed) = ProjectList.Fresh();
@@ -73,12 +72,6 @@ internal static class ProjectsPage
                 entry["token"] = token;
             }
             if (Json.Str(r["label"]).Trim() is { Length: > 0 } label) entry["label"] = label;
-            if (Json.Str(r["colour"]).Trim() is { Length: > 0 } colour)
-            {
-                if (!Config.IsChipColour(colour))
-                    return (null, $"{name}: {colour} is not #RRGGBB, or is the amber or red Mastermind keeps for its own signals");
-                entry["colour"] = colour;
-            }
             if (Json.True(r["hide"])) entry["hide"] = true;
             if (!listed || entry.Count > 1) projects.Add(entry);
         }

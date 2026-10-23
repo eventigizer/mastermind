@@ -13,8 +13,8 @@ From the Visual Studio Marketplace or Open VSX — the links land here with the 
 
 You need the .NET SDK 10 or newer, and Node.js 22 for the extension.
 
-- **The app** — `dotnet build app/Mastermind.csproj`. `app/run.bat` builds and runs it from source; `app/publish.bat`
-  builds the self-contained `Mastermind.exe` and copies it to the repository root.
+- **The app** — `dotnet build app/Mastermind.csproj`. `app/run.bat` builds and runs it from source;
+  `pwsh -File app/publish.ps1` builds the self-contained app as one folder, `out/app/`, with `Mastermind.exe` in it.
 - **The extension** — in `extension/`: `npm ci`, `npm run build`, then `node smoke.js`, which prints PASS.
 
 ## Layout
@@ -30,4 +30,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Sponsor
 
-Mastermind is free. If it saves you time, you can [sponsor it on GitHub](https://github.com/sponsors/eventigizer).
+Mastermind is free. If it saves you time, you can [sponsor it on GitHub](https://github.com/sponsors/dogadara).

@@ -7,7 +7,7 @@ const MIRRORED: { setting: string; key: string; kind: 'port' | 'port0' | 'flag' 
   { setting: 'hookPort', key: 'hookPort', kind: 'port' },
   { setting: 'debugPort', key: 'debugPort', kind: 'port0' },
   { setting: 'startAtLogin', key: 'startAtLogin', kind: 'flag' },
-  { setting: 'newDispatchAutoAllow', key: 'newDispatchAutoAllow', kind: 'flag' },
+  { setting: 'newSessionAutoAllow', key: 'newSessionAutoAllow', kind: 'flag' },
   { setting: 'relay', key: 'handoffs.enabled', kind: 'flag' },
 ];
 const IMPORTED = 'mastermind.imported';

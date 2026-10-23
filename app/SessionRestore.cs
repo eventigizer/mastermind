@@ -20,7 +20,8 @@ namespace Mastermind;
 /// </summary>
 internal sealed class SessionRestore
 {
-    /// <summary>One recorded session: its id, its launch folder (the transcript lookup's hint) and its auto-allow.
+    /// <summary>One recorded session: its id, its launch folder (the transcript lookup's hint), its auto-allow and
+    /// whether a person switched that off — the one off a resumed session keeps under newSessionAutoAllow.
     /// Host, Misses and LateArm are this run's alone — the host it last ran under, the ticks it has been missing from
     /// that host while the host stayed connected, and whether a reopen still starting after its wait owes its
     /// auto-allow.</summary>
@@ -29,6 +30,7 @@ internal sealed class SessionRestore
         public string Id { get; set; } = "";
         public string Cwd { get; set; } = "";
         public bool AutoAllow { get; set; }
+        public bool Off { get; set; }
         [JsonIgnore] public int Host { get; set; }
         [JsonIgnore] public int Misses { get; set; }
         [JsonIgnore] public bool LateArm { get; set; }
@@ -167,12 +169,22 @@ internal sealed class SessionRestore
         Save();
     }
 
-    /// <summary>A person's or a dispatch's auto-allow change, into every entry holding the session. UI thread.</summary>
+    /// <summary>An auto-allow change, into every entry holding the session — an off is a person's, the card's toggle
+    /// being the one writer that turns it off. UI thread.</summary>
     private void OnToggled(string sessionId, bool on)
     {
-        foreach (var s in _record.Values.SelectMany(w => w.Sessions).Where(s => s.Id == sessionId)) s.AutoAllow = on;
+        foreach (var s in _record.Values.SelectMany(w => w.Sessions).Where(s => s.Id == sessionId))
+        {
+            s.AutoAllow = on;
+            s.Off = !on;
+        }
         Save();
     }
+
+    /// <summary>A person switched this session's auto-allow off while it was recorded — a resume keeps it off. UI
+    /// thread.</summary>
+    public bool SwitchedOff(string sessionId) =>
+        _record.Values.SelectMany(w => w.Sessions).Any(s => s.Id == sessionId && s.Off);
 
     /// <summary>A window's hello (<see cref="ClientHub.WindowConnected"/>). A host other than the one the record last
     /// saw the window under is a window that came back — a reload, a VS Code restart, a reboot, whichever of

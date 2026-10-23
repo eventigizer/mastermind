@@ -20,9 +20,13 @@ internal sealed class SessionStore
 
     private const int MaxCards = 60;   // trim cap: drops from the tail, sparing needs-you cards (see AddEvent)
 
-    // Last command per session (from UserPromptSubmit), replayed onto a post-permission working ping so a
-    // WORKING card keeps showing your command. In-memory; RemoveSession clears it.
+    // Last tool action per session (a PreToolUse phrase), replayed onto a detail-less working ping so a WORKING card
+    // keeps showing what the agent is doing; a new prompt clears it. In-memory; RemoveSession clears it.
     private readonly Dictionary<string, string> _lastCommand = new(StringComparer.Ordinal);
+
+    // Your last prompt per session — every card of the session shows it in its you block (AgentEvent.YouText). Off
+    // UserPromptSubmit live, seeded off the transcript by the scan (SeedPrompt). In-memory; RemoveSession clears it.
+    private readonly Dictionary<string, string> _lastPrompt = new(StringComparer.Ordinal);
 
     // The model each session's last PostModelSwitch hook named — newer than any transcript read, which runs a turn
     // behind after an automatic or resume switch, so a card of that session takes it and the meta reads leave it be.
@@ -41,6 +45,7 @@ internal sealed class SessionStore
     private void Forget(string sessionId)
     {
         _lastCommand.Remove(sessionId);
+        _lastPrompt.Remove(sessionId);
         _hookModel.Remove(sessionId);
         _heldStops.Remove(sessionId);
     }
@@ -185,8 +190,17 @@ internal sealed class SessionStore
     /// <summary>Append rows without clearing (startup seed).</summary>
     public void AddRange(IEnumerable<AgentEvent> items)
     {
-        foreach (var e in items) if (!Hidden(e)) Events.Add(e);
+        foreach (var e in items) if (!Hidden(e)) { SeedPrompt(e); Events.Add(e); }
         Fire();
+    }
+
+    /// <summary>A scanned card arrives with your last prompt off its transcript; remember it, so the session's next
+    /// live card keeps its you block — the map is in-memory, empty after a restart. A prompt the live path already
+    /// holds wins.</summary>
+    private void SeedPrompt(AgentEvent e)
+    {
+        if (!string.IsNullOrEmpty(e.SessionId) && !string.IsNullOrEmpty(e.YouText))
+            _lastPrompt.TryAdd(e.SessionId, e.YouText);
     }
 
     /// <summary>
@@ -220,11 +234,17 @@ internal sealed class SessionStore
                 if (s.ContextTokens > 0 && cur.ContextTokens != s.ContextTokens) cur.ContextTokens = s.ContextTokens;
                 if (!string.IsNullOrEmpty(s.Title) && cur.Title != s.Title) cur.Title = s.Title;
                 if (!string.IsNullOrEmpty(s.Model) && cur.Model != s.Model && !HasHookModel(cur.SessionId)) cur.Model = s.Model;
+                if (!string.IsNullOrEmpty(s.YouText) && cur.YouText != s.YouText)
+                {
+                    cur.YouText = s.YouText;
+                    _lastPrompt[cur.SessionId] = s.YouText;
+                }
             }
             else
             {
                 if (cur != null) { InheritResolved(s, cur); Events.Remove(cur); }  // status swap → keep title/ctx
                 ApplyHookModel(s);
+                SeedPrompt(s);
                 Events.Insert(0, s);                        // new / changed card (this one animates)
             }
         }
@@ -243,19 +263,25 @@ internal sealed class SessionStore
     public void AddEvent(AgentEvent ev)
     {
         if (Hidden(ev)) return;
-        // A WORKING card should always show your last command. UserPromptSubmit carries it; remember it per
-        // session. PostToolUse (the per-tool firehose, and the only signal after you GRANT a permission) carries
-        // no detail of its own — replay the remembered command so the card doesn't blank when a permission
-        // interruption swapped it out (the in-turn PostToolUse repeats are dropped upstream while already
-        // working). In-memory only: after an app restart mid-turn the next UserPromptSubmit repopulates it.
+        // Your last prompt rides EVERY card of the session, in its you block: UserPromptSubmit carries it, the map
+        // keeps it, and a new prompt clears the last tool action — a new turn's line starts empty, not stale. The
+        // detail keeps the agent's side: PostToolUse (the per-tool firehose, and the only signal after you GRANT a
+        // permission) carries no phrase of its own, so the remembered tool action is replayed onto a detail-less
+        // ping and the card never blanks when a permission interruption swapped it out (the in-turn repeats are
+        // dropped upstream while already working). In-memory; the scan seeds the prompts after a restart (SeedPrompt).
         if (!string.IsNullOrEmpty(ev.SessionId))
         {
-            if (ev.Kind == RawKind.UserPromptSubmit && !string.IsNullOrEmpty(ev.Detail))
-                _lastCommand[ev.SessionId] = ev.Detail;
-            else if ((ev.Kind == RawKind.PostToolUse || ev.Kind == RawKind.PreToolUse)
-                     && string.IsNullOrEmpty(ev.Detail)
-                     && _lastCommand.TryGetValue(ev.SessionId, out var cmd))
-                ev.Detail = cmd;   // a read-first transition into WORKING carries no phrase — keep your command visible
+            if (ev.Kind == RawKind.UserPromptSubmit && !string.IsNullOrEmpty(ev.YouText))
+            {
+                _lastPrompt[ev.SessionId] = ev.YouText;
+                _lastCommand.Remove(ev.SessionId);
+            }
+            else if (ev.Kind == RawKind.PostToolUse || ev.Kind == RawKind.PreToolUse)
+            {
+                if (!string.IsNullOrEmpty(ev.Detail)) _lastCommand[ev.SessionId] = ev.Detail;
+                else if (_lastCommand.TryGetValue(ev.SessionId, out var cmd)) ev.Detail = cmd;
+            }
+            if (string.IsNullOrEmpty(ev.YouText) && _lastPrompt.TryGetValue(ev.SessionId, out var you)) ev.YouText = you;
         }
 
         var projKey = AgentEvent.ProjectKey(ev.Cwd);
@@ -299,13 +325,16 @@ internal sealed class SessionStore
     /// put; the notifying setters refresh just the time + detail bindings. Called instead of a full AddEvent
     /// for a per-tool ping the dispatcher would otherwise drop as a no-op.
     /// </summary>
-    public void TouchWorking(string sessionId, DateTime when, string detail)
+    public void TouchWorking(string sessionId, DateTime when, string detail, string you = null)
     {
         if (string.IsNullOrEmpty(sessionId)) return;
+        // A prompt sent while the agent is still working (queued mid-turn) moves the you block in place.
+        if (!string.IsNullOrEmpty(you)) _lastPrompt[sessionId] = you;
         foreach (var e in Events)
             if (e.SessionId == sessionId && e.Status == AgentStatus.Working)
             {
                 e.When = when;
+                if (!string.IsNullOrEmpty(you)) e.YouText = you;
                 if (!string.IsNullOrEmpty(detail))
                 {
                     e.Detail = detail;
@@ -401,7 +430,7 @@ internal sealed class SessionStore
             if (Hidden(s)) continue;
             if (!string.IsNullOrEmpty(s.SessionId))
             {
-                if (ids.Add(s.SessionId)) { ApplyHookModel(s); Events.Insert(0, s); keys.Add(AgentEvent.ProjectKey(s.Cwd)); any = true; }
+                if (ids.Add(s.SessionId)) { ApplyHookModel(s); SeedPrompt(s); Events.Insert(0, s); keys.Add(AgentEvent.ProjectKey(s.Cwd)); any = true; }
             }
             else
             {
@@ -501,11 +530,14 @@ internal sealed class SessionStore
         // progress block doesn't blank until the next 15s meta sweep repopulates it.
         if ((fresh.Todos == null || fresh.Todos.Count == 0) && prior.Todos != null && prior.Todos.Count > 0)
             fresh.Todos = prior.Todos;
-        // And the model — a status swap must never drop the heavy-model state off the ⚡ toggle. FromHook knows no
+        // And the model — a status swap must never drop the heavy-model state off the model toggle. FromHook knows no
         // model but a PostModelSwitch's (ApplyHookModel adds a hook model), so without this every live event would
         // un-red a heavy session until the next meta read landed.
         if (fresh.Model.Length == 0 && prior.Model.Length > 0)
             fresh.Model = prior.Model;
+        // And your last prompt — the you block never blanks on a status swap.
+        if (string.IsNullOrEmpty(fresh.YouText) && !string.IsNullOrEmpty(prior.YouText))
+            fresh.YouText = prior.YouText;
     }
 
     /// <summary>

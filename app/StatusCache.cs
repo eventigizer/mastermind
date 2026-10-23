@@ -2,7 +2,8 @@ namespace Mastermind;
 
 /// <summary>
 /// Remembers each session's last live status event (PermissionRequest / Stop / Notification / …) so a
-/// rescan or relaunch can restore the real last situation instead of flattening every row to OPEN.
+/// rescan or relaunch can restore the real last situation instead of flattening every row to OPEN — and its last
+/// prompt, which a long turn's output can push past the transcript tail the rescan reads.
 /// Persisted to status.json in the app folder (<see cref="ClaudePaths.StatusJson"/>, %LOCALAPPDATA%\Mastermind);
 /// entries older than a day are pruned on load.
 /// </summary>
@@ -15,7 +16,10 @@ internal static class StatusCache
     {
         public string Event { get; set; } = "";
         public long When { get; set; }   // unix ms
+        public string Prompt { get; set; }   // your last prompt, capped — the you block's fallback after a restart
     }
+
+    private const int PromptCap = 2000;   // the block shows two lines; a pasted document must not bloat the file
 
     private static string StatePath => ClaudePaths.StatusJson;
 
@@ -43,9 +47,32 @@ internal static class StatusCache
             // instead of rewriting status.json on every tool call.
             var map = Map();
             if (map.TryGetValue(sessionId, out var prev) && prev.Event == ev) return;
-            map[sessionId] = new Entry { Event = ev, When = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+            map[sessionId] = new Entry { Event = ev, When = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Prompt = prev?.Prompt };
             Save();
         }
+    }
+
+    /// <summary>Record this session's last prompt (UserPromptSubmit), kept beside its status event.</summary>
+    public static void RecordPrompt(string sessionId, string prompt)
+    {
+        if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(prompt)) return;
+        if (prompt.Length > PromptCap) prompt = prompt[..PromptCap];
+        lock (_lock)
+        {
+            var map = Map();
+            if (!map.TryGetValue(sessionId, out var e))
+                map[sessionId] = e = new Entry { When = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+            if (e.Prompt == prompt) return;
+            e.Prompt = prompt;
+            Save();
+        }
+    }
+
+    /// <summary>The session's last recorded prompt, or null if none remembered.</summary>
+    public static string Prompt(string sessionId)
+    {
+        if (string.IsNullOrEmpty(sessionId)) return null;
+        lock (_lock) { return Map().TryGetValue(sessionId, out var e) ? e.Prompt : null; }
     }
 
     public static void Remove(string sessionId)

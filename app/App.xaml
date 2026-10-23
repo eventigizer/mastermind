@@ -11,17 +11,23 @@
            declared ON the element: Mastermind.UiProbe parses this dictionary cut out of the file, with only the
            two standard namespaces re-declared. -->
       <sys:Double xmlns:sys="clr-namespace:System;assembly=System.Runtime" x:Key="CardHeight">372</sys:Double>
+      <!-- The card width, overridden the same way while fullscreen so whole columns fill the width (UpdateCardHeight). -->
+      <sys:Double xmlns:sys="clr-namespace:System;assembly=System.Runtime" x:Key="CardWidth">344</sys:Double>
 
       <!-- ============================ PALETTE ============================ -->
-      <Color x:Key="AccentColor">#D97757</Color>
-      <Color x:Key="AccentColorHi">#E89072</Color>
+      <!-- Every hue on the panel names a status: green finished, blue your turn or ready, amber needs permission,
+           red cost (the heavy model, a near-full context), grey busy. The accent is therefore a bright NEUTRAL —
+           the project chip, the header dot, a dialog's action — never a hue. TextLo is the dimmest grey that still
+           clears 4.5:1 on Surface. -->
+      <Color x:Key="AccentColor">#C8C8D0</Color>
+      <Color x:Key="AccentColorHi">#E0E0E6</Color>
 
       <SolidColorBrush x:Key="TextHi"   Color="#F4F4F6"/>
       <SolidColorBrush x:Key="TextMid"  Color="#A8A8B4"/>
-      <SolidColorBrush x:Key="TextLo"   Color="#70707B"/>
-      <SolidColorBrush x:Key="Mono"     Color="#C7B3A6"/>
+      <SolidColorBrush x:Key="TextLo"   Color="#868691"/>
+      <SolidColorBrush x:Key="Mono"     Color="#9A9AA6"/>
 
-      <SolidColorBrush x:Key="Accent"   Color="#D97757"/>
+      <SolidColorBrush x:Key="Accent"   Color="#C8C8D0"/>
       <SolidColorBrush x:Key="Amber"    Color="#E0A458"/>
       <SolidColorBrush x:Key="Green"    Color="#5FB87A"/>
       <SolidColorBrush x:Key="Blue"     Color="#6EA8FE"/>
@@ -115,7 +121,7 @@
       </Style>
 
       <!-- ====================== MODEL TOGGLE BUTTON ====================== -->
-      <!-- The ⚡ model toggle is a STATEFUL toggle (pressed = heavy): its Background is data-bound (solid red
+      <!-- The model toggle is a STATEFUL text toggle (filled = heavy): its Background is data-bound (solid red
            while on the heavy model, transparent otherwise), so it can't share GhostButton — that template's
            hover trigger REPLACES the background and would wipe the red the instant you mouse over it. Hover
            here dims via Opacity instead, which composes with any bound fill. -->
@@ -129,16 +135,42 @@
           <Setter.Value>
             <ControlTemplate TargetType="Button">
               <Border x:Name="bg" Background="{TemplateBinding Background}"
-                      CornerRadius="8" Padding="{TemplateBinding Padding}">
-                <!-- The ⚡ glyph's metrics sit LOW in its em box, so a plain centered presenter reads as
-                     bottom-hugging. The 2px bottom margin is an OPTICAL lift (centers the visible glyph,
-                     not the em box) — sized by eye against the 24x20 chip; re-check if the glyph/font
-                     changes. -->
-                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,2"/>
+                      CornerRadius="8" Padding="{TemplateBinding Padding}" BorderThickness="1" BorderBrush="Transparent">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
               </Border>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                   <Setter TargetName="bg" Property="Opacity" Value="0.75"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+
+      <!-- ====================== TEXT TOGGLE (CheckBox) =================== -->
+      <!-- A two-state text button — the toggle-button convention (Windows' ToggleButton, VS Code's search toggles):
+           ON is a filled neutral chip with bright text, off is dim text alone. No hue: the state it carries is no
+           card status. Same geometry as the model toggle beside it. -->
+      <Style x:Key="TextToggle" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{StaticResource TextLo}"/>
+        <Setter Property="FontFamily" Value="{StaticResource Sans}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="CheckBox">
+              <Border x:Name="bg" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                      CornerRadius="8" Padding="{TemplateBinding Padding}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="bg" Property="Background" Value="#16FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                  <Setter TargetName="bg" Property="Background" Value="#2EFFFFFF"/>
+                  <Setter TargetName="bg" Property="BorderBrush" Value="#4DFFFFFF"/>
+                  <Setter Property="Foreground" Value="{StaticResource TextHi}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -155,7 +187,7 @@
         <Setter Property="CornerRadius" Value="13"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}"/>
-        <Setter Property="Width" Value="344"/>
+        <Setter Property="Width" Value="{DynamicResource CardWidth}"/>
         <Setter Property="Height" Value="{DynamicResource CardHeight}"/>   <!-- every card the same height (incoming / session / placeholder); overflow scrolls inside.
              The design height (CardHeight above) is sized to the card's always-present rows at the uniform 5px row
              rhythm — re-derive it if a row is added or removed; it is the ONE knob, never tune a card individually. -->
@@ -185,9 +217,9 @@
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="Thumb">
-              <!-- Terracotta accent (#D97757) at ~80%. Margin 0 + the 2px-wide root grid below = exactly 2px
-                   of orange, no inset padding. -->
-              <Border CornerRadius="1" Background="#CCD97757"/>
+              <!-- Mid grey at ~60% — a fill indicator, never a hue. Margin 0 + the 2px-wide root grid below =
+                   exactly 2px, no inset padding. -->
+              <Border CornerRadius="1" Background="#99A8A8B4"/>
             </ControlTemplate>
           </Setter.Value>
         </Setter>
@@ -195,19 +227,20 @@
       <!-- The HORIZONTAL bar is a real grab target, not a hairline. The 2px slim treatment works for the
            vertical bars (a passive fill indicator inside cards and the normal-mode list) but is unusable as a
            drag handle, and fullscreen's column-major list can ONLY be dragged sideways. MinWidth keeps the
-           thumb catchable when many columns compress it; brighter + rounder so it reads as grabbable. -->
+           thumb catchable when many columns compress it. Neutral greys on the template's TrackBg pill, never
+           the accent: a coloured thumb with no track reads as a progress meter over the big count below it. -->
       <Style x:Key="GrabThumb" TargetType="Thumb">
         <Setter Property="MinWidth" Value="44"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="Thumb">
-              <Border x:Name="Bar" CornerRadius="5" Background="#E6D97757" Margin="0,1,0,1"/>
+              <Border x:Name="Bar" CornerRadius="6" Background="#FF70707B" Margin="1"/>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="Bar" Property="Background" Value="#FFE08A66"/>
+                  <Setter TargetName="Bar" Property="Background" Value="#FFA8A8B4"/>
                 </Trigger>
                 <Trigger Property="IsDragging" Value="True">
-                  <Setter TargetName="Bar" Property="Background" Value="#FFF0A183"/>
+                  <Setter TargetName="Bar" Property="Background" Value="#FFC8C8D2"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -225,6 +258,7 @@
           <Setter.Value>
             <ControlTemplate TargetType="ScrollBar">
               <Grid x:Name="Root" Background="Transparent">
+                <Border x:Name="TrackBg" CornerRadius="7"/>
                 <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
                   <Track.Thumb>
                     <Thumb x:Name="ThumbPart" Style="{StaticResource SlimThumb}"/>
@@ -255,6 +289,7 @@
                   <Setter TargetName="Root" Property="Height" Value="14"/>
                   <Setter TargetName="Root" Property="VerticalAlignment" Value="Bottom"/>
                   <Setter TargetName="ThumbPart" Property="Style" Value="{StaticResource GrabThumb}"/>
+                  <Setter TargetName="TrackBg" Property="Background" Value="#1AFFFFFF"/>
                   <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
                 </Trigger>
               </ControlTemplate.Triggers>

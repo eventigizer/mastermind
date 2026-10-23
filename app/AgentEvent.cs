@@ -23,8 +23,8 @@ public sealed class TodoItem
         b.Freeze();
         return b;
     }
-    private static readonly Brush Done    = F("#5FB87A");
-    private static readonly Brush Active  = F("#6EA8FE");
+    private static readonly Brush Done    = F("#5FB87A");   // finished — the FINISHED green
+    private static readonly Brush Active  = F("#F4F4F6");   // in progress — bright neutral; blue means your turn
     private static readonly Brush Pending = F("#8893A6");
 }
 
@@ -131,6 +131,26 @@ public sealed class AgentEvent : INotifyPropertyChanged
         }
     }
 
+    // YOUR side of the card: the last prompt you sent this session — typed by hand, picked from the panel or a slash
+    // command — in its own block above the detail, which keeps only the agent's side (the reply, the live action). Off
+    // the UserPromptSubmit hook live, off the transcript after a restart; SessionStore keeps it per session.
+    // NOTIFYING: a prompt queued while the card is already WORKING updates it in place (TouchWorking).
+    private string _youText = "";
+    public string YouText
+    {
+        get => _youText;
+        set
+        {
+            value ??= "";
+            if (_youText == value) return;
+            _youText = value;
+            PropertyChanged?.Invoke(this, new(nameof(YouText)));
+            PropertyChanged?.Invoke(this, new(nameof(YouVisibility)));
+        }
+    }
+    public System.Windows.Visibility YouVisibility => string.IsNullOrWhiteSpace(_youText)
+        ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
     // ---- TODO list (#3) — the agent's latest TodoWrite, read off the transcript tail. The card shows a
     // compact "<done>/<total> · <current item>" summary, expandable to the full checklist.
     private IReadOnlyList<TodoItem> _todos = Array.Empty<TodoItem>();
@@ -202,10 +222,15 @@ public sealed class AgentEvent : INotifyPropertyChanged
     // slot: "open in VS Code" for a placeholder (no agent — the note that used to sit in the detail line),
     // "new session" for a live agent whose ai-title hasn't resolved yet. NOT "waiting…" — that word is a status
     // (WAITING FOR YOU, WAITING), and a default title must never read as a status claim. TitleBrush mutes the
-    // fallbacks so a real title reads brighter than a stand-in.
+    // fallbacks so a real title reads brighter than a stand-in. A card that does not need you (busy, waiting on a
+    // background task, open) dims its title and detail one step, so the eye lands on the ones that do — no hue, no
+    // border; Status is init-only, so neither brush needs to notify.
     public string TitleDisplay => !string.IsNullOrWhiteSpace(Title) ? Title
         : IsPlaceholder ? "open in VS Code" : "new session";
-    public Brush TitleBrush => string.IsNullOrWhiteSpace(Title) ? CTitleMuted : CTitleHi;
+    public Brush TitleBrush => string.IsNullOrWhiteSpace(Title)
+        ? (NeedsYou ? CTitleMuted : CTextLo)
+        : (NeedsYou ? CTitleHi : CTitleMuted);
+    public Brush DetailBrush => NeedsYou ? CTitleMuted : CTextLo;
     public System.Windows.Visibility DetailVisibility => string.IsNullOrWhiteSpace(Detail)
         ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
 
@@ -242,11 +267,10 @@ public sealed class AgentEvent : INotifyPropertyChanged
     // ---- MODEL — which model this session is currently on: its last PostModelSwitch hook's to_model once one has
     // arrived (SessionStore.SetHookModel), else the transcript (Sessions.ReadMeta) — a pending `/model` switch's own
     // stdout, else the last assistant turn's message.model. The HEAVY model's
-    // indicator is the ⚡ toggle ITSELF, inverted: solid hot-red background + white glyph while heavy, ghost
-    // grey when default — the pressed-toggle idiom (a bold/italic editor button). State lives on the one
-    // control that changes it; the earlier red card BORDER + "⚡ FABLE" pill pair is retired — three surfaces
-    // for one bit was the indicator overload that made none of them read, and with the border now meaningless
-    // the bright chip on an otherwise flat card is the loudest thing on it.
+    // indicator is the model toggle ITSELF, a text toggle labelled with heavy_match: solid red fill + white text
+    // while heavy (red is the cost hue), dim text when default — the toggle-button idiom. State lives on the one
+    // control that changes it; the earlier red card BORDER + "FABLE" pill pair is retired — three surfaces
+    // for one bit was the indicator overload that made none of them read.
     // Heavy = the model name, any `[…]` suffix stripped, contains prompts.json's heavy_match (default "fable"),
     // case-insensitively — so a version bump needs no code change, and both spellings the two producers yield
     // ("Fable 5" / "claude-fable-5[1m]") match.
@@ -272,20 +296,22 @@ public sealed class AgentEvent : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Re-read the heavy test and the ⚡ toggle drawn from it — on a model change (the setter) and when
-    /// prompts.json moves heavy_match (<see cref="PromptPresets.HeavyMatchChanged"/>).</summary>
+    /// <summary>Re-read the heavy test and the model toggle drawn from it — on a model change (the setter) and when
+    /// prompts.json moves heavy_match (<see cref="PromptPresets.HeavyMatchChanged"/>), which is also its label.</summary>
     public void RefreshHeavy()
     {
         PropertyChanged?.Invoke(this, new(nameof(IsHeavy)));
         PropertyChanged?.Invoke(this, new(nameof(ModelToggleBg)));
         PropertyChanged?.Invoke(this, new(nameof(ModelGlyphBrush)));
         PropertyChanged?.Invoke(this, new(nameof(ModelToggleTip)));
+        PropertyChanged?.Invoke(this, new(nameof(ModelToggleLabel)));
     }
     // The toggle addresses the session over CDP like every other card action, so a session id is all it needs.
     public System.Windows.Visibility ModelToggleVisibility => string.IsNullOrEmpty(SessionId)
         ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+    public string ModelToggleLabel => PromptPresets.HeavyMatch.ToLowerInvariant();
     public Brush ModelToggleBg  => IsHeavy ? CFable : System.Windows.Media.Brushes.Transparent;
-    public Brush ModelGlyphBrush => IsHeavy ? System.Windows.Media.Brushes.White : CSlate;
+    public Brush ModelGlyphBrush => IsHeavy ? System.Windows.Media.Brushes.White : CTextLo;   // off = the `auto` toggle's dim text
     public string ModelToggleTip => IsHeavy
         ? $"Running {_model} — click to put this session back on the default model"
         : "Switch this session to the heavy model for a tough problem";
@@ -378,18 +404,16 @@ public sealed class AgentEvent : INotifyPropertyChanged
     private static Brush CtxColor(double f)
     {
         f = Math.Clamp(f, 0, 1);
-        // 4-stop escalation on the fixed 1M window: flat GREY until 45% (nothing to watch), then
-        // grey -> orange (45-52%), orange -> red (52-60%), red -> deep "crazy" red (60-100%). Tuned so
-        // full RED lands at ~60% — the top of the "close the session" window — and crazy-red past it.
-        // No grey-mute: the first stop IS grey, and orange/red/crazy run at full saturation. This
-        // deliberately drops the old "saturated red reserved for needs-you" rule.
+        // 3-stop escalation on the fixed 1M window: flat GREY until 45% (nothing to watch), then grey -> red
+        // (45-60%), red -> deep "crazy" red (60-100%). Tuned so full RED lands at ~60% — the top of the "close the
+        // session" window — and crazy-red past it. Red is the panel's COST hue (with the heavy-model toggle); no
+        // orange stop, which would read as the amber of NEEDS PERMISSION.
         static double L(double x, double y, double t) => x + (y - x) * t;
-        // grey #8C8C92 -> orange #F0883E -> red #E5484D -> crazy #FF1A1A
+        // grey #8C8C92 -> red #E5484D -> crazy #FF1A1A
         double r, g, b;
         if (f < 0.45)      { r = 140; g = 140; b = 146; }                                                               // flat grey
-        else if (f < 0.52) { double t = (f - 0.45) / 0.07; r = L(140, 240, t); g = L(140, 136, t); b = L(146, 62, t); } // grey   -> orange
-        else if (f < 0.60) { double t = (f - 0.52) / 0.08; r = L(240, 229, t); g = L(136, 72, t);  b = L(62, 77, t); }  // orange -> red
-        else               { double t = (f - 0.60) / 0.40; r = L(229, 255, t); g = L(72, 26, t);   b = L(77, 26, t); }  // red    -> crazy red
+        else if (f < 0.60) { double t = (f - 0.45) / (0.60 - 0.45); r = L(140, 229, t); g = L(140, 72, t); b = L(146, 77, t); } // grey -> red
+        else               { double t = (f - 0.60) / 0.40; r = L(229, 255, t); g = L(72, 26, t);   b = L(77, 26, t); }  // red  -> crazy red
         var br = new SolidColorBrush(System.Windows.Media.Color.FromRgb((byte)r, (byte)g, (byte)b));
         br.Freeze();
         return br;
@@ -433,12 +457,13 @@ public sealed class AgentEvent : INotifyPropertyChanged
     }
     private static readonly Brush CTitleHi    = Solid("#F4F4F6");   // real title — matches the XAML TextHi
     private static readonly Brush CTitleMuted = Solid("#A8A8B4");   // default-title stand-in — matches TextMid
+    private static readonly Brush CTextLo     = Solid("#868691");   // a dimmed card's text — matches TextLo
     private static readonly Brush CAmber  = Solid("#E0A458");
     private static readonly Brush CGreen  = Solid("#5FB87A");
     private static readonly Brush CBlue   = Solid("#6EA8FE");
     private static readonly Brush CSlate  = Solid("#8893A6");
     private static readonly Brush CWork   = Solid("#6E7E8F");   // muted steel-GREY: agent busy, recede — pulled off the waiting-blue so "your turn" and "just busy" never read alike
-    private static readonly Brush CFable  = Solid("#FF3B30");   // HOT red for the heavy model — louder than the muted #E0524D error red on purpose; it fills the ⚡ model TOGGLE (its only surface), never the card or the status accent
+    private static readonly Brush CFable  = Solid("#FF3B30");   // HOT red for the heavy model — louder than the muted #E0524D error red on purpose; it fills the model TOGGLE (its only surface), never the card or the status accent
     private static readonly Brush TAmber  = Solid("#26E0A458");
     private static readonly Brush TGreen  = Solid("#265FB87A");
     private static readonly Brush TBlue   = Solid("#266EA8FE");
@@ -446,44 +471,16 @@ public sealed class AgentEvent : INotifyPropertyChanged
     private static readonly Brush TWork   = Solid("#206E7E8F");
 
     // ---- per-project MONOGRAM chip -------------------------------------------------------------------
-    // Project identity is ONE element: a Slack-style solid-colour chip carrying the project's initials
-    // (its config label, else its routing token: WEB / API / … — ProjectList), leading the card's secondary row. The industry shape for
-    // workspace identity (Slack workspace squares, Chrome profile avatars, Linear project keys) and the ONLY
-    // surface where five hues stay unmistakable on a dark theme — the earlier background-wash and coloured-
-    // border attempts both failed the same way: mixing any hue into #1E1F27 crushes lightness until every
-    // project reads as the same near-black mauve. A small SOLID full-saturation block keeps chroma intact,
-    // and the initials double-code it so identity survives even for a colour-blind reader.
-    //
-    // Everything else deliberately carries NO project colour: the card background is flat Surface, the border
-    // is the neutral hairline, the project-name text is TextMid. One surface, one meaning — the panel had
-    // accumulated three project surfaces plus two fable surfaces and none of them read.
-    //
-    // The slot is the project's index in the project list (ProjectList — the manifest's order) — NOT a hash of
-    // the cwd. A hash mod the palette over the wired set collides more often than not (birthday), and two
-    // same-coloured chips are how you type into the wrong project. Listed projects get GUARANTEED-distinct slots; only
-    // unlisted ones fall back to the hash. The palette must stay at least as long as the project list, or the overflow
-    // projects land in the hash bucket and the guarantee silently dies. A config colour overrides the slot.
-    //
-    // TWO HUES ARE RESERVED: amber (#E0A458) is the attention colour — the NEEDS PERMISSION status (CAmber)
-    // and the incoming-prompts inbox card — and red (#FF3B30) is the heavy-model toggle's inverted state. A
-    // chip wearing either would impersonate a different signal, so Config refuses both as a project colour.
-    private static readonly (byte r, byte g, byte b)[] _palette =
-    {
-        (0x6E, 0x9F, 0xE0),   // blue      — list[0]
-        (0x6F, 0xC0, 0x8A),   // green     — list[1]
-        (0xC8, 0x8B, 0xF5),   // purple    — list[2]
-        (0xFF, 0x7B, 0xB0),   // hot pink  — list[3]
-        (0x3F, 0xD8, 0xD0),   // turquoise — list[4]
-        (0xB4, 0xD6, 0x5A),   // lime      — list[5]
-        (0xE3, 0x6F, 0xD0),   // magenta   — list[6]
-    };
+    // Project identity is ONE element: an inverted chip — the bright neutral Accent fill, dark initials — leading the
+    // card's secondary row. Identity rides the TEXT and brightness, never a hue: every hue on the panel names a status
+    // (green finished, blue your turn, amber permission, red cost, grey busy), and a hued chip beside a same-hued
+    // status pill read as one signal. The project-key idiom of status desks (Jira and Linear keys, Grafana panel
+    // titles), where colour is kept for state. Everything else carries no project marking either: the card
+    // background is flat Surface, the border the neutral hairline, the project-name text TextMid.
 
-    private static readonly Dictionary<string, Brush> _chipBrushes = new();
-    private static readonly object _tintLock = new();
-
-    /// <summary>The chip's initials — the double-coding beside its colour: the project's config label, else its routing
-    /// token (the one the handoff filenames use: FEtoBE__…), else initials off the folder name, so an unknown checkout
-    /// still reads. The list is read once at startup — restart Mastermind after the manifest changes.</summary>
+    /// <summary>The chip's initials — the project's identity: its config label, else its routing token (the one the
+    /// handoff filenames use: FEtoBE__…), else initials off the folder name, so an unknown checkout still reads. The
+    /// list is read once at startup — restart Mastermind after the manifest changes.</summary>
     public string ProjectMonogram
     {
         get
@@ -498,41 +495,6 @@ public sealed class AgentEvent : INotifyPropertyChanged
                 if (p.Length > 0 && sb.Length < 3) sb.Append(char.ToUpperInvariant(p[0]));
             return sb.Length > 0 ? sb.ToString() : "?";
         }
-    }
-
-    /// <summary>The chip's solid full-saturation fill — the identity colour, on the chip and nowhere else.</summary>
-    public Brush ProjectChipBrush
-    {
-        get
-        {
-            var key = ProjectKey(Cwd);
-            lock (_tintLock)
-            {
-                if (_chipBrushes.TryGetValue(key, out var b)) return b;
-                var brush = BuildChipBrush(key, ProjectName);
-                if (ProjectList.SnapshotGood) _chipBrushes[key] = brush;   // a colour off a failed manifest read is not kept
-                return brush;
-            }
-        }
-    }
-
-    private static Brush BuildChipBrush(string key, string projectName)
-    {
-        if (string.IsNullOrEmpty(key)) return Solid("#8893A6");   // slate — no project to identify
-
-        var colour = ProjectList.ForLeaf(projectName)?.Colour;     // config's colour, checked at load (#RRGGBB, no reserved hue)
-        if (colour != null) return Solid(colour);
-        int slot = ProjectList.Order(projectName);           // listed → its fixed index (never collides)
-        if (slot >= _palette.Length)                          // unlisted (int.MaxValue) → hash bucket
-        {
-            int h = 17;
-            unchecked { foreach (char c in key) h = h * 31 + c; }
-            slot = ((h % _palette.Length) + _palette.Length) % _palette.Length;
-        }
-        var (pr, pg, pb) = _palette[slot];
-        var br = new SolidColorBrush(Color.FromRgb(pr, pg, pb));
-        br.Freeze();
-        return br;
     }
 
     // THE table: status -> (pill label, accent colour, faint pill-bg tint). Adding a status means adding one row
@@ -567,7 +529,7 @@ public sealed class AgentEvent : INotifyPropertyChanged
             kind = RawKind.PreToolUse;
             name = "PreToolUse";
         }
-        string tool = "", message = "", model = "";
+        string tool = "", message = "", model = "", you = "";
         switch (kind)
         {
             case RawKind.PermissionRequest:
@@ -594,7 +556,7 @@ public sealed class AgentEvent : INotifyPropertyChanged
                 }
                 break;
             case RawKind.UserPromptSubmit:
-                message = HookText.CleanPrompt(p.Prompt);
+                you = HookText.CleanPrompt(p.Prompt);   // your side — the you block, never the detail line
                 break;
             case RawKind.PostModelSwitch:
                 model = p.ToModel;
@@ -613,6 +575,7 @@ public sealed class AgentEvent : INotifyPropertyChanged
             Status       = status,
             Detail       = detail,           // Title/ContextTokens stay empty -> filled off-thread by caller
             Model        = model,
+            YouText      = you,              // empty but on a prompt — SessionStore.AddEvent fills the rest per session
         };
         e._autoAllow = autoAllow;   // reflect the persisted toggle (no write-back)
         e.RefreshTime();
@@ -621,7 +584,7 @@ public sealed class AgentEvent : INotifyPropertyChanged
 
     /// <summary>A passive "currently open" row (no trigger fired). Shown at startup for navigation.</summary>
     public static AgentEvent Baseline(string cwd, string sessionId, string summary, long ctx, DateTime when,
-        IReadOnlyList<TodoItem> todos = null, string model = "")
+        IReadOnlyList<TodoItem> todos = null, string model = "", string lastPrompt = "")
     {
         var project = Paths.Leaf(cwd);
         var e = new AgentEvent
@@ -639,6 +602,7 @@ public sealed class AgentEvent : INotifyPropertyChanged
             ContextTokens = ctx,
             Todos        = todos,
             Model        = model,
+            YouText      = lastPrompt,
         };
         e._autoAllow = AutoAllowStore.IsOn(sessionId);
         e.RefreshTime();
@@ -648,12 +612,15 @@ public sealed class AgentEvent : INotifyPropertyChanged
     /// <summary>
     /// A scan row whose status is restored from the session's last known situation (a remembered hook
     /// event, or a transcript that ended its turn) instead of a neutral OPEN. Otherwise like Baseline.
+    /// A restored FINISHED row shows <paramref name="lastReply"/>, the transcript's concluding text, and every restored
+    /// row <paramref name="lastPrompt"/> in its you block — the hook payloads that carried both died with the last run.
     /// </summary>
     public static AgentEvent Restored(string cwd, string sessionId, string title, long ctx, DateTime when, string eventName,
-        IReadOnlyList<TodoItem> todos = null, string model = "")
+        IReadOnlyList<TodoItem> todos = null, string model = "", string lastReply = "", string lastPrompt = "")
     {
         var project = Paths.Leaf(cwd);
-        var (status, detail) = Resolve(KindOf(eventName), "", "");
+        var kind = KindOf(eventName);
+        var (status, detail) = Resolve(kind, "", kind == RawKind.Stop ? lastReply : "");
         var e = new AgentEvent
         {
             SessionId    = sessionId,
@@ -669,6 +636,7 @@ public sealed class AgentEvent : INotifyPropertyChanged
             ContextTokens = ctx,
             Todos        = todos,
             Model        = model,
+            YouText      = lastPrompt,
         };
         e._autoAllow = AutoAllowStore.IsOn(sessionId);
         e.RefreshTime();
@@ -762,8 +730,8 @@ public sealed class AgentEvent : INotifyPropertyChanged
                 return (AgentStatus.Open, "");
 
             case RawKind.UserPromptSubmit:
-                // You replied → the agent is working again. `message` is the command you just sent; show it so
-                // a WORKING card says what's running. Calm state — you can ignore it.
+                // You replied → the agent is working again. Your prompt rides the you block (YouText), so the
+                // detail starts empty until a tool phrase lands. Calm state — you can ignore it.
                 return (AgentStatus.Working, message);
 
             case RawKind.PreToolUse:

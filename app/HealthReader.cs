@@ -38,8 +38,8 @@ internal static class HealthReader
     /// program on it — with Error saying so; each host's largest Claude panel heap in MB; each host whose placed panel
     /// failed its heap read, with why; each host's reading's V8 isolate id — the heap is the isolate's, and panels of
     /// several windows can share one; and, when answered, Error for a Claude panel no probe could place — the
-    /// extension drifted, or a panel still loading or signed out, which ClientHub tells apart by showing it only on a
-    /// second panel read running — landing on every window the read gave nothing.</summary>
+    /// extension drifted, or a panel still loading or signed out — which belongs to no window, so ClientHub logs it on a
+    /// second panel read running and puts it on no window's item.</summary>
     internal sealed record Panels(bool Answered, Dictionary<int, long> Mb, Dictionary<int, string> Errors,
                                   Dictionary<int, string> Isolates, string Error);
 
@@ -255,8 +255,8 @@ internal static class HealthReader
             else errors[host] = "a Claude panel did not answer Runtime.getHeapUsage";
         }
         string error = claude.Count > 0 && probes.Count == 0
-            ? "Claude panels found, none answered the probe — Claude Code changed its panel; update Mastermind"
-            : blind ? "a Claude panel could not be placed in its window — Claude Code changed its panel; update Mastermind"
+            ? "Claude panels found, none answered the probe on two reads running — signed out or still loading, else Claude Code changed its panel and Mastermind needs an update"
+            : blind ? "a Claude panel could not be placed in its window on two reads running — signed out or still loading, else Claude Code changed its panel and Mastermind needs an update"
             : null;
         return new Panels(true, mb, errors, isolates, error);
     }

@@ -8,8 +8,7 @@ namespace Mastermind;
 internal sealed class PromptDispatcher
 {
     private readonly LogStore _log;
-    private readonly Action<string> _onNewSessionAutoAllowed;   // patch the live card's auto-allow checkbox after a new-session dispatch (race guard)
-    public PromptDispatcher(LogStore log, Action<string> onNewSessionAutoAllowed = null) { _log = log; _onNewSessionAutoAllowed = onNewSessionAutoAllowed; }
+    public PromptDispatcher(LogStore log) { _log = log; }
 
     /// <summary>The windows' shells, set by App once built — the port-off dispatch types through them.</summary>
     internal ClientHub Clients { get; set; }
@@ -73,33 +72,11 @@ internal sealed class PromptDispatcher
         if (r == CdpInjector.CreateResult.PortOff && Clients != null) { await TypeIntoNew(it, moved, key, cmd); return; }
         if (r == CdpInjector.CreateResult.Sent)
         {
-            if (!string.IsNullOrEmpty(sid)) Own(key, sid, it.DestRoot, typed: false);
-            // else leave PENDING (id never landed): GC clears the owner entry when the file goes, and auto-allow
-            // can't be set without the id (the new agent prompts normally until its first turn, unavoidable here)
+            if (!string.IsNullOrEmpty(sid)) PromptOwnerStore.Set(key, sid);
+            // else leave PENDING (id never landed): GC clears the owner entry when the file goes
         }
         else RollBack(moved, it);   // back to Waiting → no owner
         LogCdp(it, r, "new agent");
-    }
-
-    /// <summary>A new session's owner link — typed when the dispatch only typed its text (B20) — and config's
-    /// newDispatchAutoAllow: a deliberately-dispatched agent runs unattended — started auto-allow ON, never into a hidden
-    /// project (AutoAllowStore.Arm); a live card reflects it now, else its card seeds ON at creation.</summary>
-    private void Own(string key, string sid, string destRoot, bool typed)
-    {
-        PromptOwnerStore.Set(key, sid, typed, spawned: true);
-        if (Config.Current.NewDispatchAutoAllow && AutoAllowStore.Arm(sid, destRoot))
-            _onNewSessionAutoAllowed?.Invoke(sid);
-    }
-
-    /// <summary>A tick handing a typed `new` dispatch to a session other than the one the 20 s search took — the search
-    /// found none, or took another fresh session in that window (PromptStore): config's newDispatchAutoAllow moves to
-    /// the session that sent it, off the one taken. UI thread.</summary>
-    public void MoveAutoAllow(string from, string to, string destRoot)
-    {
-        if (!Config.Current.NewDispatchAutoAllow) return;
-        if (from != PromptOwnerStore.Pending) AutoAllowStore.Set(from, false);
-        AutoAllowStore.Arm(to, destRoot);
-        _onNewSessionAutoAllowed?.Invoke(to);
     }
 
     private static readonly TimeSpan NewSessionWait = TimeSpan.FromSeconds(20);
@@ -122,7 +99,7 @@ internal sealed class PromptDispatcher
         if (refused != null) { RestorePortOff(moved, it, refused); return; }
         try
         {
-            PromptOwnerStore.Set(key, PromptOwnerStore.Pending, typed: true, spawned: true);
+            PromptOwnerStore.Set(key, PromptOwnerStore.Pending, typed: true);
             var before = LiveSessions.RunningIn(it.DestRoot).Select(r => r.SessionId).ToHashSet();
             Platform.EditorWindows.GrantForeground();   // the panel's click holds the foreground — the raise below needs it
             var open = Clients.OpenNew(host, cmd);
@@ -142,7 +119,7 @@ internal sealed class PromptDispatcher
             if (!StillPending()) return;
             if (sid != null)
             {
-                Own(key, sid, it.DestRoot, typed: true);
+                PromptOwnerStore.Set(key, sid, typed: true);
                 _log.Add(LogKind.Info, $"prompt {it.FileName} : typed into a new {Paths.Leaf(it.DestRoot)} session — press Enter there to send");
             }
             else _log.Add(LogKind.Warn, $"prompt {it.FileName} : typed into a new {Paths.Leaf(it.DestRoot)} session whose id never showed — back to inbox if you did not send it");

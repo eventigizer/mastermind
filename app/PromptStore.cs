@@ -30,13 +30,11 @@ public sealed class PromptStore : INotifyPropertyChanged
     private int _tick;
     private readonly Action<PromptItem> _autoTransport;   // set by App to PromptDispatcher.Transport
     private readonly Action<IReadOnlyList<ProjectEntry>, bool> _cleanStaging;   // set by App to PromptDispatcher.CleanStaging
-    private readonly Action<string, string, string> _moveAutoAllow;   // set by App to PromptDispatcher.MoveAutoAllow
     private bool _stagingChecked;                          // once per run — the clean is start-only (user decision)
 
     // internal: ProjectEntry is internal, and a public constructor taking it is CS0051.
-    internal PromptStore(Action<PromptItem> autoTransport, Action<IReadOnlyList<ProjectEntry>, bool> cleanStaging,
-        Action<string, string, string> moveAutoAllow)
-    { _autoTransport = autoTransport; _cleanStaging = cleanStaging; _moveAutoAllow = moveAutoAllow; }
+    internal PromptStore(Action<PromptItem> autoTransport, Action<IReadOnlyList<ProjectEntry>, bool> cleanStaging)
+    { _autoTransport = autoTransport; _cleanStaging = cleanStaging; }
 
     /// <summary>One tick: enumerate every listed project's outbox + inbox + processing folder, build the
     /// desired PromptItem set, diff into Items in place, and auto-transport any stable source file. openKeys =
@@ -133,14 +131,12 @@ public sealed class PromptStore : INotifyPropertyChanged
                 // status, which a startup dialog or the person's own turn raises without it — and the session that sent
                 // it owns it: the one it was handed to, or the project's running session whose message names the file,
                 // when the 20 s search never found the new one (a slow start) or took another fresh session in that window.
-                // A `new` dispatch's auto-allow follows it there.
                 if (owner?.Typed == true
                     && LiveSessions.RunningIn(root).Select(r => r.SessionId).Prepend(owner.Value.Sid).Distinct()
                            .Where(s => s != PromptOwnerStore.Pending).FirstOrDefault(s => Sessions.UserSaid(s, root, fn)) is { } sender)
                 {
                     PromptOwnerStore.Set(key, sender);
-                    if (owner.Value.Spawned && sender != owner.Value.Sid) _moveAutoAllow(owner.Value.Sid, sender, root);
-                    owner = (sender, false, false);
+                    owner = (sender, false);
                 }
                 var ownerSid = owner?.Sid;
                 ownerAlive = ownerSid == PromptOwnerStore.Pending || (ownerSid != null && liveSids.Contains(ownerSid));

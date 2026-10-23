@@ -2,14 +2,14 @@ import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { Client, Message } from './client';
 
-type Row = { root: string; name: string; token: string; label: string; colour: string; hide: boolean; manifest: boolean };
+type Row = { root: string; name: string; token: string; label: string; hide: boolean; manifest: boolean };
 
 let panel: vscode.WebviewPanel | undefined;
 let loaded: Row[] = [];
 
 /**
  * "Mastermind: Projects": one editor tab listing every project Mastermind knows — a row each with its name on
- * the chip, routing code, chip colour and hide, dragged to reorder, and a ✕ that takes it off the list (else a
+ * the chip, routing code and hide, dragged to reorder, and a ✕ that takes it off the list (else a
  * row stays in config for good). A manifest's project shows its place and code locked. The exe reads and writes (ProjectsPage.cs); Save asks first when a code changed, since a handoff already
  * addressed to the old code reads UNKNOWN DEST, and Mastermind restarts to take the list in.
  */
@@ -96,8 +96,8 @@ function page(rows: Row[]): string {
 </style></head>
 <body>
 <h2>Projects</h2>
-<p class="hint">Drag a row to reorder. A project the manifest sets keeps its place and code. An empty colour takes the palette's. &#x2715; takes a project off the list — a folder still open comes back unconfigured.</p>
-<table><thead><tr><th></th><th>Project</th><th>Name on the chip</th><th>Code</th><th>Colour</th><th>Hide</th><th></th></tr></thead>
+<p class="hint">Drag a row to reorder. A project the manifest sets keeps its place and code. &#x2715; takes a project off the list — a folder still open comes back unconfigured.</p>
+<table><thead><tr><th></th><th>Project</th><th>Name on the chip</th><th>Code</th><th>Hide</th><th></th></tr></thead>
 <tbody id="rows"></tbody></table>
 <button id="save">Save</button>
 <script nonce="${nonce}">
@@ -112,7 +112,7 @@ function render() {
     tr.className = r.manifest ? 'locked' : '';
     tr.draggable = !r.manifest;
     tr.innerHTML = '<td class="grip"></td><td></td><td><input type="text" data-k="label"></td><td><input type="text" data-k="token"></td>' +
-      '<td><input type="color" data-k="pick"> <input type="text" data-k="colour" size="8"></td><td><input type="checkbox" data-k="hide"></td>' +
+      '<td><input type="checkbox" data-k="hide"></td>' +
       '<td><button type="button" class="remove" title="Take this project off the list">&#x2715;</button></td>';
     tr.children[0].textContent = r.manifest ? '\\u{1F512}' : '\\u2807';
     tr.children[1].textContent = r.name;
@@ -122,14 +122,9 @@ function render() {
     q('label').placeholder = r.token || r.name;
     q('token').value = r.token;
     q('token').disabled = r.manifest;
-    q('colour').value = r.colour;
-    q('colour').placeholder = 'palette';
-    q('pick').value = /^#[0-9a-fA-F]{6}$/.test(r.colour) ? r.colour : '#808080';
     q('hide').checked = r.hide;
     q('label').oninput = (e) => { r.label = e.target.value; };
     q('token').oninput = (e) => { e.target.value = e.target.value.toUpperCase(); r.token = e.target.value; };
-    q('colour').oninput = (e) => { r.colour = e.target.value; };
-    q('pick').oninput = (e) => { r.colour = e.target.value; q('colour').value = r.colour; };
     q('hide').onchange = (e) => { r.hide = e.target.checked; };
     const remove = tr.querySelector('.remove');
     if (r.manifest) remove.remove();

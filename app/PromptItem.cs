@@ -38,7 +38,7 @@ public sealed class PromptItem : INotifyPropertyChanged
         get => _destWindowOpen;
         // DestWindowOpen is the ONLY thing that mutates in place on a retained row (State is init; folder moves
         // are remove+insert), so the parked↔ready transition MUST raise every derived prop — incl. StateText
-        // ("WAITING"/"PARKED") and Accent (amber/grey), or the pill lies while the buttons are correct (finding D).
+        // ("READY"/"PARKED") and Accent (blue/grey), or the pill lies while the buttons are correct (finding D).
         set { if (_destWindowOpen == value) return; _destWindowOpen = value;
               Raise(nameof(DestWindowOpen)); Raise(nameof(IsParked)); Raise(nameof(RowOpacity));
               Raise(nameof(DispatchEnabled)); Raise(nameof(ParkHintVisibility));
@@ -82,6 +82,10 @@ public sealed class PromptItem : INotifyPropertyChanged
     }
 
     public string RouteText => $"{Src} → {Dst}";
+    // The name as the row shows it: without its {SRC}to{DST}__ prefix, which RouteText already carries beside it —
+    // the tail is what tells two same-route handoffs apart. The tooltip keeps the full name.
+    public string DisplayName => FileName.StartsWith($"{Src}to{Dst}__", StringComparison.Ordinal)
+        ? FileName[$"{Src}to{Dst}__".Length..] : FileName;
     public bool Unresolved => string.IsNullOrEmpty(DestRoot);   // DST token didn't map — flagged, not dispatchable
 
     // ---- view state -------------------------------------------------------
@@ -107,14 +111,14 @@ public sealed class PromptItem : INotifyPropertyChanged
     public string StateText => Unresolved ? "UNKNOWN DEST"
         : State switch { PromptState.Source => "TO SEND",
                          PromptState.InProcess => Typed ? "TYPED" : OwnerAlive ? "PROCESSING" : "ORPHAN",
-                         _ => DestWindowOpen ? "WAITING" : "PARKED" };
+                         _ => DestWindowOpen ? "READY" : "PARKED" };
 
     public string Key => Paths.Key(FullPath);   // identity for the store diff
 
     private static SolidColorBrush F(string hex) { var b=(SolidColorBrush)new BrushConverter().ConvertFromString(hex)!; b.Freeze(); return b; }
     public Brush Accent => F(
-        State == PromptState.InProcess ? (OwnerAlive || Typed ? "#6E7E8F" : "#E0524D")   // processing or typed = muted steel-grey (matches Working), orphan = danger red (NOT the terracotta brand)
-        : IsParked || Unresolved ? "#8893A6" : "#E0A458");
+        State == PromptState.InProcess ? (OwnerAlive || Typed ? "#6E7E8F" : "#6EA8FE")   // processing or typed = busy steel-grey (matches Working); an orphan is your move — blue
+        : IsParked || Unresolved ? "#8893A6" : "#6EA8FE");                               // parked / unknown = dimmed slate; ready or to send = your move — blue, never amber (NEEDS PERMISSION's)
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Raise(string n) => PropertyChanged?.Invoke(this, new(n));

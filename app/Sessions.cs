@@ -7,7 +7,7 @@ namespace Mastermind;
 /// marker sits AFTER the last usage record, so the usage describes the pre-compact conversation —
 /// <c>ContextTokens</c> is forced 0 and the card shows a "compacted" state instead of the stale number.</summary>
 internal readonly record struct SessionMeta(string Cwd, string Title, long ContextTokens, string LastStop,
-    IReadOnlyList<TodoItem> Todos, string Model, bool Compacted = false);
+    IReadOnlyList<TodoItem> Todos, string Model, bool Compacted = false, string LastReply = "", string LastPrompt = "");
 
 /// <summary>
 /// Builds the "currently live" list: one row per RUNNING Claude agent (from the live-session registry,
@@ -33,9 +33,14 @@ internal static class Sessions
                 // transcript that ended its turn (= finished, your turn — the WAITING rule lives only in the hook),
                 // else a neutral OPEN baseline row.
                 var ev = StatusCache.Get(s.SessionId) ?? (meta.LastStop == "end_turn" ? "Stop" : null);
+                // Your last prompt: the tail's, newest by construction when it holds one; else the one status.json
+                // kept, for a prompt a long turn's output pushed out of the tail.
+                var prompt = meta.LastPrompt.Length > 0 ? meta.LastPrompt : StatusCache.Prompt(s.SessionId) ?? "";
                 var card = ev != null
-                    ? AgentEvent.Restored(s.Cwd, s.SessionId, meta.Title, meta.ContextTokens, when, ev, meta.Todos, meta.Model)
-                    : AgentEvent.Baseline(s.Cwd, s.SessionId, meta.Title, meta.ContextTokens, when, meta.Todos, meta.Model);
+                    ? AgentEvent.Restored(s.Cwd, s.SessionId, meta.Title, meta.ContextTokens, when, ev, meta.Todos, meta.Model,
+                        meta.LastReply, prompt)
+                    : AgentEvent.Baseline(s.Cwd, s.SessionId, meta.Title, meta.ContextTokens, when, meta.Todos, meta.Model,
+                        prompt);
                 card.ContextCompacted = meta.Compacted;
                 result.Add(card);
                 covered.Add(Paths.Key(s.Cwd));
@@ -264,6 +269,8 @@ internal static class Sessions
         public string Cwd = "", AiTitle = "", CustomTitle = "", Summary = "", FirstUser = "";
         public string LastAsst = null;
         public string LastTodoWrite = null;        // latest TodoWrite tool_use line (tail wins) — the agent's task list
+        public string LastPrompt = "";             // latest typed prompt or slash command IN THE TAIL — a restored card's you block
+        public bool InTail = false;                // the tail pass is running — the head's first prompt is never the last one
 
         // ---- current model. TWO producers, and the LATER ONE IN THE FILE WINS (hence the seq stamps):
         //   ModelFromCmd — a `/model` slash command's own stdout ("Set model to Fable 5 for this session only").
@@ -319,13 +326,14 @@ internal static class Sessions
             }
             // TAIL — latest title + last assistant usage/stop_reason; a small file whole, a large one past its
             // (potentially multi-MB) middle.
+            a.InTail = true;
             foreach (var tline in TailLines(path)) Accumulate(tline, a);
         }
         catch { /* unreadable */ }
 
         // Context size + last turn's stop_reason + the model it ran on, from the final assistant message
         // (one parse — `model` is a sibling of `usage`/`stop_reason` on the same response envelope).
-        long ctx = 0; string lastStop = "", asstModel = "";
+        long ctx = 0; string lastStop = "", asstModel = "", lastReply = "";
         if (a.LastAsst != null)
         {
             try
@@ -333,6 +341,16 @@ internal static class Sessions
                 using var doc = JsonDocument.Parse(a.LastAsst);
                 if (doc.RootElement.TryGetProperty("message", out var msg))
                 {
+                    // A turn that ended (end_turn) wrote its concluding text as this very record — the reply a
+                    // restored FINISHED card shows, since the Stop payload that carried it died with the last run.
+                    if (msg.TryGetProperty("stop_reason", out var end) && end.ValueKind == JsonValueKind.String
+                        && end.GetString() == "end_turn"
+                        && doc.RootElement.TryGetProperty("type", out var rt) && rt.GetString() == "assistant"
+                        && msg.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
+                        lastReply = HookText.MdToText(string.Join("\n\n", content.EnumerateArray()
+                            .Where(b => b.TryGetProperty("type", out var bt) && bt.GetString() == "text"
+                                        && b.TryGetProperty("text", out var tx) && tx.ValueKind == JsonValueKind.String)
+                            .Select(b => b.GetProperty("text").GetString())));
                     // input + both cache components = the call's PROMPT; + output = the conversation as it
                     // now stands (the reply joins the input on the very next call). Output included so the
                     // card tracks the same quantity the IDE's own context gauge means, not one reply behind.
@@ -367,7 +385,7 @@ internal static class Sessions
                    : a.Summary != ""     ? a.Summary
                    : a.FirstUser;
         return new SessionMeta(a.Cwd, Truncate(detail, 120), ctx, lastStop,
-            ParseTodos(a.LastTodoWrite), model, compacted);
+            ParseTodos(a.LastTodoWrite), model, compacted, lastReply, a.LastPrompt);
     }
 
     /// <summary>
@@ -486,7 +504,11 @@ internal static class Sessions
         bool wantTitle   = line.Contains("-title\"");          // ai-title / custom-title (keep latest)
         bool wantSummary = a.Summary == ""   && line.Contains("\"summary\"");
         bool wantUser    = a.FirstUser == "" && line.Contains("\"type\":\"user\"");
-        if (!(wantCwd || wantTitle || wantSummary || wantUser)) return;
+        // A typed prompt: a user record that is neither a tool result, a command's expansion (isMeta) nor a
+        // compaction summary.
+        bool wantPrompt  = a.InTail && line.Contains("\"type\":\"user\"") && !line.Contains("\"tool_result\"")
+                           && !line.Contains("\"isMeta\":true") && !line.Contains("\"isCompactSummary\":true");
+        if (!(wantCwd || wantTitle || wantSummary || wantUser || wantPrompt)) return;
 
         try
         {
@@ -512,9 +534,26 @@ internal static class Sessions
             else if (wantUser && type == "user" && r.TryGetProperty("message", out var m)
                 && m.TryGetProperty("content", out var content))
                 a.FirstUser = ExtractText(content);
+
+            // The prompt a card's you block shows, as UserPromptSubmit words it (HookText.CleanPrompt) — EVERY text
+            // block joined, since the editor's context (an opened file, a selection) can ride as its own block ahead
+            // of what you typed; a slash command lands as tags the clean strips, so it reads as its name and arguments.
+            if (wantPrompt && type == "user" && r.TryGetProperty("message", out var pm)
+                && pm.TryGetProperty("content", out var pc))
+            {
+                var raw = AllText(pc);
+                var prompt = HookText.CleanPrompt(raw);
+                if (prompt.Length == 0 && Command.Match(raw) is { Success: true } cmd)
+                    prompt = HookText.CleanPrompt(cmd.Groups[1].Value + " " + cmd.Groups[2].Value);
+                if (prompt.Length > 0) a.LastPrompt = prompt;
+            }
         }
         catch { /* skip unparsable line */ }
     }
+
+    private static readonly System.Text.RegularExpressions.Regex Command = new(
+        @"<command-name>(.*?)</command-name>(?:.*?<command-args>(.*?)</command-args>)?",
+        System.Text.RegularExpressions.RegexOptions.Singleline);
 
     private static string ExtractText(JsonElement content)
     {
@@ -525,6 +564,15 @@ internal static class Sessions
                     && txt.ValueKind == JsonValueKind.String)
                     return txt.GetString() ?? "";
         return "";
+    }
+
+    private static string AllText(JsonElement content)
+    {
+        if (content.ValueKind == JsonValueKind.String) return content.GetString() ?? "";
+        if (content.ValueKind != JsonValueKind.Array) return "";
+        return string.Join("\n", content.EnumerateArray()
+            .Where(i => i.ValueKind == JsonValueKind.Object && i.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String)
+            .Select(i => i.GetProperty("text").GetString()));
     }
 
     private static string Truncate(string s, int n)

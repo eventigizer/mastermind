@@ -9,7 +9,6 @@ internal sealed class PromptOwner
 {
     public string sid { get; set; } = "";   // the dispatched-to session id, or the PENDING marker while it resolves
     public bool typed { get; set; }         // the dispatch only typed its text (debug port off) and nobody has sent it yet
-    public bool spawned { get; set; }       // a `new` dispatch: the session that sends it runs under config's newDispatchAutoAllow
 }
 
 /// <summary>
@@ -36,15 +35,15 @@ internal static class PromptOwnerStore
 
     /// <summary>Record (or update) the owner sid for a processing file and persist — <paramref name="typed"/> when the
     /// dispatch only TYPED its text (the debug port off, the person presses Enter), where <paramref name="sid"/> may be
-    /// <see cref="Pending"/> while a new session's id resolves; <paramref name="spawned"/> when a `new` dispatch started it.</summary>
-    public static void Set(string fileKey, string sid, bool typed = false, bool spawned = false)
+    /// <see cref="Pending"/> while a new session's id resolves.</summary>
+    public static void Set(string fileKey, string sid, bool typed = false)
     {
         if (string.IsNullOrEmpty(fileKey) || string.IsNullOrEmpty(sid)) return;
         lock (_lock)
         {
             var map = Map();
-            if (map.TryGetValue(fileKey, out var cur) && cur.sid == sid && cur.typed == typed && cur.spawned == spawned) return;   // no-op: don't rewrite for an unchanged owner
-            map[fileKey] = new PromptOwner { sid = sid, typed = typed, spawned = spawned };
+            if (map.TryGetValue(fileKey, out var cur) && cur.sid == sid && cur.typed == typed) return;   // no-op: don't rewrite for an unchanged owner
+            map[fileKey] = new PromptOwner { sid = sid, typed = typed };
             Json.SaveAtomic(ClaudePaths.PromptOwnersJson, map);
         }
     }
@@ -53,11 +52,11 @@ internal static class PromptOwnerStore
     public static void SetPending(string fileKey) => Set(fileKey, Pending);
 
     /// <summary>The file's owner — its sid (or the <see cref="Pending"/> marker), whether the dispatch only typed its
-    /// text, nobody having sent it yet, and whether a `new` dispatch started it — or null if this file has no entry.</summary>
-    public static (string Sid, bool Typed, bool Spawned)? Find(string fileKey)
+    /// text, nobody having sent it yet — or null if this file has no entry.</summary>
+    public static (string Sid, bool Typed)? Find(string fileKey)
     {
         if (string.IsNullOrEmpty(fileKey)) return null;
-        lock (_lock) return Map().TryGetValue(fileKey, out var o) ? (o.sid, o.typed, o.spawned) : null;
+        lock (_lock) return Map().TryGetValue(fileKey, out var o) ? (o.sid, o.typed) : null;
     }
 
     /// <summary>Drop the entry (dispatch rolled back to Waiting → no owner).</summary>

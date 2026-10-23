@@ -73,7 +73,7 @@
                         <Setter Property="Foreground" Value="{StaticResource TextHi}"/>
                       </Trigger>
                       <Trigger Property="IsSelected" Value="True">
-                        <Setter TargetName="bg" Property="Background" Value="#40D97757"/>
+                        <Setter TargetName="bg" Property="Background" Value="#30FFFFFF"/>
                         <Setter Property="Foreground" Value="{StaticResource TextHi}"/>
                       </Trigger>
                     </ControlTemplate.Triggers>

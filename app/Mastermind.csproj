@@ -18,7 +18,7 @@
     <NoWarn>CA1416;CS8002</NoWarn>
   </PropertyGroup>
 
-  <!-- Publish defaults (publish.bat overrides on the command line too). -->
+  <!-- Publish defaults (publish.ps1 overrides on the command line too). -->
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <DebugType>embedded</DebugType>
   </PropertyGroup>

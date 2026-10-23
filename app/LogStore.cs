@@ -75,13 +75,13 @@ internal sealed class LogStore
         return b;
     }
 
-    // kind → line colour. Event = calm neutral (the firehose), Drop = muted (ignored/hidden),
-    // Info = green (lifecycle), Warn = amber (something off).
+    // kind → line brightness, no hue (every hue on the panel names a card status). Drop = dimmest (ignored/hidden),
+    // Event = calm (the firehose), Info = brighter (lifecycle), Warn = brightest (something off — it toasts too).
     private static readonly Dictionary<LogKind, Brush> Tints = new()
     {
-        [LogKind.Event] = Solid("#9FB0C4"),
-        [LogKind.Drop]  = Solid("#6E7787"),
-        [LogKind.Info]  = Solid("#5FB87A"),
-        [LogKind.Warn]  = Solid("#E0A458"),
+        [LogKind.Event] = Solid("#9A9AA6"),
+        [LogKind.Drop]  = Solid("#6E6E7A"),
+        [LogKind.Info]  = Solid("#C8C8D0"),
+        [LogKind.Warn]  = Solid("#F4F4F6"),
     };
 }

@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         _ticker.Tick += (_, _) => { foreach (var e in _store.Events) e.RefreshTime(); RefreshWorkingMeta(); };
         _ticker.Start();
 
-        // A prompts.json save that moves heavy_match re-lights every card's ⚡ toggle — raised on the UI thread.
+        // A prompts.json save that moves heavy_match re-lights and relabels every card's model toggle — raised on the UI thread.
         PromptPresets.HeavyMatchChanged += () => { foreach (var e in _store.Events) e.RefreshHeavy(); };
 
         // Debounced placement save: dragging/resizing fires a burst of events; persist once it settles.
@@ -187,13 +187,16 @@ public partial class MainWindow : Window
         CountBadge.Visibility = need > 0 ? Visibility.Visible : Visibility.Collapsed;
         CountText.Text = need.ToString();
 
-        // The big count where the hidden log sits: red while a session waits on a permission (the tray disc's rule),
-        // else the accent. Zero fades it out holding its last number; a rise pops it.
+        // The badge and the big count where the hidden log sits: amber while a session waits on a permission (the
+        // NEEDS PERMISSION pill's colour, and the tray disc's), else blue. Zero fades the big one out holding its last
+        // number; a rise pops it.
         bool permission = _store.Events.Any(e => e.Status == AgentStatus.NeedsPermission);
-        var ink = (System.Windows.Media.SolidColorBrush)FindResource(permission ? "Red" : "Accent");
+        var ink = (System.Windows.Media.SolidColorBrush)FindResource(permission ? "Amber" : "Blue");
+        CountText.Foreground = ink;
+        CountBadge.Background = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromArgb(0x22, ink.Color.R, ink.Color.G, ink.Color.B));
         if (need > 0) BigCountText.Text = need.ToString();
         BigCountText.Foreground = ink;
-        BigCountGlow.Color = ink.Color;
         BigCountBody.BeginAnimation(OpacityProperty, new DoubleAnimation(need > 0 ? 1 : 0, TimeSpan.FromMilliseconds(180)));
         if (need > _lastNeed)
         {
@@ -656,25 +659,32 @@ public partial class MainWindow : Window
     // Card design height (App.xaml CardHeight), the card's bottom margin, and the horizontal scrollbar's band —
     // RESERVED always, so the bar appearing or vanishing can never re-trigger the height it depends on.
     private const double CardDesignHeight = 372;
+    private const double CardDesignWidth = 344;   // App.xaml CardWidth
     private const double CardGap = 6;
+    private const double CardGapX = 8;            // EventCard's right margin
     private const double HScrollBand = 14;
 
     /// <summary>
     /// Fullscreen cards always fit TWO per column: when two design-height rows don't fit the list's height (a
     /// 768px laptop, or the log strip open), every card shrinks to half the space — only the * detail row gives up
     /// height, the pinned rows stay put. A screen that fits two at design height keeps them; normal mode (one
-    /// column that scrolls down) always uses the design height. Driven off the list's own size, so it follows
-    /// fullscreen toggles, the log strip and monitor moves alike.
+    /// column that scrolls down) always uses the design height. Across, fullscreen fits WHOLE columns: as many
+    /// design-width cards as the width holds, each widened to share what is left, so no visible column is cut
+    /// through. Driven off the list's own size, so it follows fullscreen toggles, the log strip and monitor moves alike.
     /// </summary>
     private void UpdateCardHeight()
     {
-        double h = CardDesignHeight;
+        double h = CardDesignHeight, w = CardDesignWidth;
         if (_full)
         {
             double avail = ListScroller.ActualHeight - ListScroller.Padding.Top - ListScroller.Padding.Bottom - HScrollBand;
             if (avail > 0 && avail < 2 * (CardDesignHeight + CardGap)) h = Math.Floor(avail / 2 - CardGap);
+            double across = ListScroller.ActualWidth - ListScroller.Padding.Left - ListScroller.Padding.Right;
+            int columns = (int)(across / (CardDesignWidth + CardGapX));
+            if (columns >= 1) w = Math.Floor(across / columns - CardGapX);
         }
         if (!(Resources["CardHeight"] is double cur && cur == h)) Resources["CardHeight"] = h;
+        if (!(Resources["CardWidth"] is double curW && curW == w)) Resources["CardWidth"] = w;
     }
 
     private void ListScroller_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateCardHeight();
@@ -694,6 +704,12 @@ public partial class MainWindow : Window
         EventList.ItemsPanel = new ItemsPanelTemplate(panel);
         ListScroller.VerticalScrollBarVisibility   = cols ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
         ListScroller.HorizontalScrollBarVisibility = cols ? ScrollBarVisibility.Auto      : ScrollBarVisibility.Disabled;
+        // The viewer draws its bars outside its Padding, so the sideways bar ran window edge to edge while the
+        // cards sit inset; its ends take the list's own left and right padding, lining up with the cards.
+        ListScroller.ApplyTemplate();
+        if (ListScroller.Template.FindName("PART_HorizontalScrollBar", ListScroller)
+            is System.Windows.Controls.Primitives.ScrollBar bar)
+            bar.Margin = new Thickness(ListScroller.Padding.Left, 0, ListScroller.Padding.Right, 0);
         UpdateCardHeight();
     }
 
@@ -912,11 +928,12 @@ public partial class MainWindow : Window
         });
     }
 
-    // An armed quick-reply button: its disarm timer plus the label + colour to restore.
-    private sealed record Armed(DispatcherTimer Timer, object Content, Brush Foreground);
+    // An armed quick-reply button: its disarm timer plus the label + colour to restore — the colour as its LOCAL value,
+    // unset when the style supplies it, so a restore never pins a colour over the style's hover.
+    private sealed record Armed(DispatcherTimer Timer, object Content, object Foreground);
 
     /// <summary>
-    /// The two-click guard on the one-click senders: the FIRST click arms the button (amber, "go?") for a few seconds
+    /// The two-click guard on the one-click senders: the FIRST click arms the button (bright, "go?") for a few seconds
     /// and sends nothing; only a second click on the armed button returns true (fire). Left alone it disarms itself.
     /// Inline rather than a dialog — a deliberate send stays two quick clicks on the same spot, a slip sends nothing.
     /// State lives on the button (<c>Tag</c>), so a card swapped out by a status change simply starts disarmed.
@@ -924,11 +941,12 @@ public partial class MainWindow : Window
     private bool ArmOrFire(System.Windows.Controls.Button b)
     {
         if (b.Tag is Armed armed) { Disarm(b, armed); return true; }
-        var a = new Armed(new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) }, b.Content, b.Foreground);
+        var a = new Armed(new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) }, b.Content,
+            b.ReadLocalValue(System.Windows.Controls.Control.ForegroundProperty));
         a.Timer.Tick += (_, _) => Disarm(b, a);
         b.Tag = a;
         b.Content = $"{a.Content}?";
-        b.Foreground = (Brush)FindResource("Amber");
+        b.Foreground = (Brush)FindResource("TextHi");
         a.Timer.Start();
         return false;
     }
@@ -939,7 +957,8 @@ public partial class MainWindow : Window
         if (!ReferenceEquals(b.Tag, a)) return;
         b.Tag = null;
         b.Content = a.Content;
-        b.Foreground = a.Foreground;
+        if (a.Foreground == DependencyProperty.UnsetValue) b.ClearValue(System.Windows.Controls.Control.ForegroundProperty);
+        else b.SetValue(System.Windows.Controls.Control.ForegroundProperty, a.Foreground);
     }
 
     /// <summary>The log line for a composer send — shared by every card action that types into a session (prompt,

@@ -59,7 +59,7 @@ public static class PromptPresets
     public static string ModelOff { get; private set; } = DefaultModelOff;
 
     /// <summary>What counts as the heavy model: a card whose model name, any <c>[…]</c> suffix stripped, contains this
-    /// (case-insensitively) shows the ⚡ toggle lit. prompts.json's <c>heavy_match</c>.</summary>
+    /// (case-insensitively) shows the model toggle lit, and the toggle's label. prompts.json's <c>heavy_match</c>.</summary>
     public static string HeavyMatch { get; private set; } = DefaultHeavyMatch;
 
     /// <summary>Raised on the UI thread when a reload moves <see cref="HeavyMatch"/> — a card re-reads its heavy test only

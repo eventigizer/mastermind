@@ -46,7 +46,7 @@ internal static class ConfigWriter
                     else if (Paths.Key(dir) != Paths.Key(run.ClaudeDir)) changes.Add((key, dir));
                     break;
                 case "startAtLogin": Flag(key, node, run.StartAtLogin); break;
-                case "newDispatchAutoAllow": Flag(key, node, run.NewDispatchAutoAllow); break;
+                case "newSessionAutoAllow": Flag(key, node, run.NewSessionAutoAllow); break;
                 case "handoffs.enabled": Flag(key, node, run.HandoffsEnabled); break;
                 default: warn($"config · the shell sent {key}, a key it never writes — ignored"); break;
             }

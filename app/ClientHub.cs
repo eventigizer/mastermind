@@ -21,7 +21,8 @@ namespace Mastermind;
 /// <c>handoffs.uninstall {id, root}</c>, "Use handoffs in this project" and its undo, answered by <c>reply {id, ok,
 /// error, needCode, notes, restart, relay}</c> — relay true when the install wrote handoffs.enabled.
 /// <c>projects.get {id}</c> and <c>projects.save {id, projects}</c>, the projects page, answered by <c>reply {id, ok,
-/// projects}</c> and <c>reply {id, ok, error, restart}</c>.
+/// projects}</c> and <c>reply {id, ok, error, restart}</c>. <c>quit</c> — the shell's update of its bundled copy stops
+/// the exe before it swaps the app folder.
 /// Out: <c>needs {count, items: [{title, project, status, state}]}</c> — the who-needs-you count across every window,
 /// on hello and after store changes settle, to each window only when it differs from what that window was last sent;
 /// an item's state is <c>permission</c>, <c>waiting</c> or <c>finished</c>, which the shell's badge colours on.
@@ -59,9 +60,9 @@ internal sealed class ClientHub
         public string LevelText = "";
         public double LevelShare;
         public string PanelState;                // the panel's last state, null before the first read or after a reload — a tick finding one reads the panels; UI thread
-        public long PanelMb = -1;                // its last reading, kept as stale for one panel read that misses it
+        public long PanelMb = -1;                // its last reading, kept as stale while its panel is out of the list and its sessions run
         public long PanelRead = -1;              // the last raw heap read — the reading is the lower of it and the next
-        public int PanelMisses;                  // panel reads in a row that missed this window's panel — UI thread
+        public int PanelFailures;                // panel reads in a row that failed for this window — its error shows from the second; UI thread
         public string PanelError;
         public string PanelIsolate;              // the V8 isolate its reading came from, null when none — panels of several windows can share one; UI thread
     }
@@ -73,6 +74,7 @@ internal sealed class ClientHub
     private readonly SessionStore _store;
     private readonly Action<LogKind, string> _log;
     private readonly Action _showPanel;
+    private readonly Action _quit;
     private readonly Func<IReadOnlyList<string>, bool> _restart;
     // The keys the change that started this run moved, held against connect-time sends for its first minute: a window
     // connecting with a different value disagrees with the window that moved it (two windows' CLAUDE_CONFIG_DIR, VS
@@ -90,15 +92,16 @@ internal sealed class ClientHub
     private readonly DispatcherTimer _needsDebounce;
     private int _healthTick;
     private bool _healthReading;   // a read still running skips the tick — UI thread
-    private bool _driftSeen;       // the last panel read found a Claude panel it could not place — UI thread
+    private bool _driftSeen;       // the last panel read found a Claude panel it could not place — the second in a row is logged; UI thread
 
     /// <summary>Built on the UI thread, whose dispatcher runs the debounce and every inbound message.</summary>
-    public ClientHub(SessionStore store, Action<LogKind, string> log, Action showPanel,
+    public ClientHub(SessionStore store, Action<LogKind, string> log, Action showPanel, Action quit,
                      Func<IReadOnlyList<string>, bool> restart, IReadOnlyList<string> restartedFor, Dispatcher ui)
     {
         _store = store;
         _log = log;
         _showPanel = showPanel;
+        _quit = quit;
         _restart = restart;
         _restartedFor = new HashSet<string>(restartedFor);
         _ui = ui;
@@ -329,47 +332,59 @@ internal sealed class ClientHub
                     servers = new HealthReader.ServerRead(windows, new Dictionary<string, int>(), new HashSet<string>());
                 }
                 if (panelFailed != null) Warn($"health · {panelFailed}");
-                // A Claude panel the probe cannot place may only be loading — just reloaded, or signed out — so its drift
-                // error shows once the next panel read finds one too.
+                // A Claude panel the probe cannot place belongs to no window, so its error goes to the log, never onto a
+                // window's item — and only once the next panel read finds one too, since it may only be loading (just
+                // reloaded, or signed out).
                 if (panel is { Answered: true, Error: not null })
                 {
-                    if (!_driftSeen) panel = panel with { Error = null };
+                    if (_driftSeen) Warn($"health · {panel.Error}");
                     _driftSeen = true;
                 }
                 else if (panel != null) _driftSeen = false;
-                ApplyHealth(servers.Windows, panels && failed == null, panel);
+                ApplyHealth(servers, panels && failed == null, panel);
             });
         });
     }
 
-    private void ApplyHealth(Dictionary<int, HealthReader.WindowReading> servers, bool panelsRead, HealthReader.Panels panel)
+    private void ApplyHealth(HealthReader.ServerRead servers, bool panelsRead, HealthReader.Panels panel)
     {
         var read = new List<(Client C, HealthReader.WindowReading W)>();
+        var running = servers.HostBySession.Values.ToHashSet();   // the hosts with a Claude session running under them
         foreach (var c in _clients.Keys.Where(x => x.HealthOn && x.HostPid > 0))
         {
             // A window that turned health on after this read began waits for the next tick — never an empty reading.
-            if (!servers.TryGetValue(c.HostPid, out var w)) continue;
+            if (!servers.Windows.TryGetValue(c.HostPid, out var w)) continue;
             // Only a port of 0 reads off; every failure past it is the panel's error.
-            if (CdpClient.Port == 0) { c.PanelState = "off"; c.PanelMb = -1; c.PanelRead = -1; c.PanelMisses = 0; c.PanelError = null; c.PanelIsolate = null; }
+            if (CdpClient.Port == 0) { c.PanelState = "off"; c.PanelMb = -1; c.PanelRead = -1; c.PanelFailures = 0; c.PanelError = null; c.PanelIsolate = null; }
             else if (panelsRead && panel != null)
             {
+                // This window's own failure — the read's, when the port gave no target list, else its placed panel's heap
+                // read — shows once the next panel read fails too: one miss is a panel loading or a slow answer.
                 panel.Errors.TryGetValue(c.HostPid, out var failed);
-                if (!panel.Answered) PanelFailed(c, panel.Error);
-                else if (panel.Mb.TryGetValue(c.HostPid, out var mb))
+                string error = panel.Answered ? failed : panel.Error;
+                c.PanelFailures = error != null ? c.PanelFailures + 1 : 0;
+                string shown = c.PanelFailures >= 2 ? error : null;
+                if (panel.Answered && panel.Mb.TryGetValue(c.HostPid, out var mb))
                 {
                     // A heap read counts garbage until the next collection, so one read flaps: the reading is the lower
                     // of the last two.
                     c.PanelMb = c.PanelRead >= 0 ? Math.Min(mb, c.PanelRead) : mb;
                     c.PanelRead = mb;
                     c.PanelState = "ok";
-                    c.PanelMisses = 0;
-                    c.PanelError = failed;
+                    c.PanelError = shown;
                     c.PanelIsolate = panel.Isolates.TryGetValue(c.HostPid, out var isolate) ? isolate : null;
                 }
-                else if (failed != null) PanelFailed(c, failed);
-                // A panel out of the list keeps its last value as stale for one read; the second miss drops it.
-                else if (c.PanelMb >= 0 && ++c.PanelMisses < 2) { c.PanelState = "stale"; c.PanelError = panel.Error; }
-                else { c.PanelMb = -1; c.PanelRead = -1; c.PanelMisses = 0; c.PanelError = panel.Error; c.PanelState = panel.Error != null ? "error" : "none"; c.PanelIsolate = null; }
+                else if (error != null)
+                {
+                    c.PanelError = shown;
+                    c.PanelState = c.PanelMb >= 0 ? "stale" : shown != null ? "error" : "none";
+                    if (c.PanelState != "stale") c.PanelIsolate = null;
+                }
+                // Out of the list: a panel in the background drops out of CDP while its renderer keeps its heap, so the
+                // last reading stands as stale while a Claude session runs under the window; with none left, nothing
+                // holds a panel there.
+                else if (c.PanelMb >= 0 && running.Contains(c.HostPid)) { c.PanelState = "stale"; c.PanelError = null; }
+                else { c.PanelMb = -1; c.PanelRead = -1; c.PanelError = null; c.PanelState = "none"; c.PanelIsolate = null; }
             }
             c.PanelState ??= "none";
             read.Add((c, w));
@@ -398,15 +413,6 @@ internal sealed class ClientHub
                 ["error"] = w.Error,
             }, ref c.HealthSent);
         }
-    }
-
-    /// <summary>A panel read that failed for one window: its last value kept as stale beside the error, else the error
-    /// alone — never off, which only a port of 0 reads.</summary>
-    private static void PanelFailed(Client c, string error)
-    {
-        c.PanelError = error;
-        c.PanelState = c.PanelMb >= 0 ? "stale" : "error";
-        if (c.PanelState == "error") c.PanelIsolate = null;
     }
 
     /// <summary>A window by its folders' names — in another window's tooltip, the log and the health check's submenu.
@@ -581,6 +587,10 @@ internal sealed class ClientHub
             case "show":
                 _showPanel();
                 break;
+            case "quit":
+                _log(LogKind.Info, $"client · window {c.HostPid} asked Mastermind to quit — an update replaces it");
+                _quit();
+                break;
             case "settings":
                 if (!_restartAsked && m["values"] is JsonObject values)
                 {
@@ -611,7 +621,7 @@ internal sealed class ClientHub
                 c.PanelState = null;
                 c.PanelMb = -1;
                 c.PanelRead = -1;
-                c.PanelMisses = 0;
+                c.PanelFailures = 0;
                 c.PanelError = null;
                 c.PanelIsolate = null;
                 if (IsLocal(c)) HealthReloaded?.Invoke(c.HostPid, c.Folders.ToList(), WindowName(c));

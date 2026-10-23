@@ -29,6 +29,8 @@ internal sealed class HookPayload
     public string ToModel { get; private set; } = "";
     /// <summary>Set only when the hook fired inside a subagent call — the event still carries the parent's session id.</summary>
     public string AgentId { get; private set; } = "";
+    /// <summary>SessionStart's <c>startup</c>, <c>resume</c>, <c>clear</c> or <c>compact</c>.</summary>
+    public string Source { get; private set; } = "";
 
     private static readonly HashSet<string> ToolInputKeys = new(StringComparer.Ordinal)
     { "command", "file_path", "notebook_path", "pattern", "url", "query", "description", "subagent_type" };
@@ -71,6 +73,7 @@ internal sealed class HookPayload
                         break;
                     case "to_model":               p.ToModel = Str(ref r); break;
                     case "agent_id":               p.AgentId = Str(ref r); break;
+                    case "source":                 p.Source = Str(ref r); break;
                     default:                       r.Skip(); break;
                 }
             }

@@ -31,20 +31,20 @@
       <!-- TOAST OVERLAY: transient Warn banners off the LogStore funnel (see ShowToast). Auto-dismiss,
            click-through (IsHitTestVisible=False so it never blocks the cards), floated bottom-LEFT on top of
            everything via ZIndex — over the first card column, where the eye already is; on a wide fullscreen
-           monitor the right edge is outside it. Danger tone (red), never brand — a failure the log strip would
-           let scroll past. -->
+           monitor the right edge is outside it. Neutral, ⚠ and bright text — every hue on the panel names a card
+           status, so a failure the log strip would let scroll past stands out by brightness and place. -->
       <ItemsControl x:Name="ToastHost" Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="100"
                     VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="16,0,0,16"
                     IsHitTestVisible="False">
         <ItemsControl.ItemTemplate>
           <DataTemplate>
-            <Border Background="#F2241618" BorderBrush="#80E0524D" BorderThickness="1" CornerRadius="9"
+            <Border Background="#F2202128" BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="9"
                     Padding="13,9" Margin="0,7,0,0" MaxWidth="330">
               <Border.Effect>
                 <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.55" Color="#000000"/>
               </Border.Effect>
               <StackPanel Orientation="Horizontal">
-                <TextBlock Text="&#x26A0;" Foreground="#E0524D" FontSize="12.5" FontWeight="Bold"
+                <TextBlock Text="&#x26A0;" Foreground="{StaticResource TextHi}" FontSize="12.5" FontWeight="Bold"
                            Margin="0,0,9,0" VerticalAlignment="Top"/>
                 <TextBlock Text="{Binding}" Foreground="{StaticResource TextHi}" FontSize="11.5" TextWrapping="Wrap"/>
               </StackPanel>
@@ -53,13 +53,13 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <!-- soft accent glow behind the header. RowSpan 0-1 + Top align so its fixed 92px draws over the top of
+      <!-- soft neutral glow behind the header. RowSpan 0-1 + Top align so its fixed 92px draws over the top of
            the list WITHOUT forcing the Auto header row to 92px (that was the giant gap above the cards). -->
       <Border Grid.Row="0" Grid.RowSpan="2" Height="92" VerticalAlignment="Top" CornerRadius="8,8,0,0" IsHitTestVisible="False">
         <Border.Background>
           <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#2BD97757" Offset="0"/>
-            <GradientStop Color="#00D97757" Offset="1"/>
+            <GradientStop Color="#14FFFFFF" Offset="0"/>
+            <GradientStop Color="#00FFFFFF" Offset="1"/>
           </LinearGradientBrush>
         </Border.Background>
       </Border>
@@ -88,10 +88,10 @@
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
             <TextBlock Text="Mastermind" FontFamily="{StaticResource Display}" VerticalAlignment="Center"
                        FontSize="15.5" FontWeight="SemiBold" Foreground="{StaticResource TextHi}"/>
-            <Border x:Name="CountBadge" CornerRadius="9" Background="#22D97757"
+            <Border x:Name="CountBadge" CornerRadius="9" Background="#226EA8FE"
                     Padding="9,3" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
                     ToolTip="Agents waiting on you — a permission, an idle wait, or a finished turn">
-              <TextBlock x:Name="CountText" Text="0" Foreground="{StaticResource Accent}"
+              <TextBlock x:Name="CountText" Text="0" Foreground="{StaticResource Blue}"
                          FontSize="11.5" FontWeight="SemiBold"/>
             </Border>
           </StackPanel>
@@ -127,12 +127,13 @@
           </StackPanel>
 
           <!-- degraded state: VS Code is open but its workspaces are unreadable (IDE locks missing) — the
-               empty list is a blind spot, NOT genuine quiet. Amber so it never reads as "all clear". -->
+               empty list is a blind spot, NOT genuine quiet. Bright with the warning glyph, against the quiet
+               state's dim one, so it never reads as "all clear"; no hue — those name card statuses. -->
           <StackPanel x:Name="DegradedState" Visibility="Collapsed" VerticalAlignment="Center"
                       HorizontalAlignment="Center" Margin="20,40,20,60">
             <TextBlock Text="&#xE7BA;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                       FontSize="34" Foreground="{StaticResource Amber}" HorizontalAlignment="Center"/>
-            <TextBlock Text="Can't see your sessions" Foreground="{StaticResource Amber}" FontSize="14"
+                       FontSize="34" Foreground="{StaticResource TextHi}" HorizontalAlignment="Center"/>
+            <TextBlock Text="Can't see your sessions" Foreground="{StaticResource TextHi}" FontSize="14"
                        FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,2"/>
             <TextBlock Text="VS Code is running but its workspaces aren't&#x0a;readable yet. This isn't &quot;all quiet&quot; — try Refresh."
                        Foreground="{StaticResource TextLo}" FontSize="11.5" TextAlignment="Center"
@@ -147,12 +148,12 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.Resources>
               <!-- Incoming-prompts inbox: a FIRST-position card in the same wrap flow, SAME EventCard shell as
-                   the session cards (same 344 width / corner / border) but a distinct amber tint so it reads as
-                   the prompt inbox. DataContext is the PromptStore singleton; the inner list is its Items. HIDDEN while
-                   there are no prompts: an empty inbox would spend a whole card slot — one of only two per column on
-                   a short screen — to say nothing (auto-move has nothing to act on then either). -->
+                   the session cards (same width / corner / border / plain surface) — its file list is what sets it
+                   apart; a tint would borrow a status hue. DataContext is the PromptStore singleton; the inner list is
+                   its Items. HIDDEN while there are no prompts: an empty inbox would spend a whole card slot — one of
+                   only two per column on a short screen — to say nothing (auto-move has nothing to act on then either). -->
               <DataTemplate DataType="{x:Type local:PromptStore}">
-                <Border Background="#26E0A458" BorderBrush="#4DE0A458">
+                <Border>
                   <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource EventCard}">
                       <Style.Triggers>
@@ -172,7 +173,7 @@
                     <Grid Grid.Row="0" Margin="0,0,0,4">
                       <TextBlock Text="INCOMING PROMPTS" FontSize="10.5" FontWeight="Bold"
                                  Foreground="{StaticResource TextHi}" VerticalAlignment="Center"/>
-                      <CheckBox Content="auto-move" HorizontalAlignment="Right" FontSize="10.5"
+                      <CheckBox Content="auto-move" HorizontalAlignment="Right" FontSize="11"
                                 Foreground="{StaticResource TextLo}" VerticalAlignment="Center"
                                 IsChecked="{Binding AutoMove, Mode=TwoWay}"/>
                     </Grid>
@@ -185,14 +186,15 @@
                                  filename IS the contract (the dispatched command names it verbatim), so it's the
                                  one field that must stay readable — sharing its line with the buttons left it
                                  ellipsised at roughly half the card width, which hid exactly the tail that tells
-                                 two handoffs apart. Full name on hover as the backstop. -->
+                                 two handoffs apart. It shows without its {SRC}to{DST}__ prefix, which the route
+                                 label below already carries; the full name on hover as the backstop. -->
                             <Grid Margin="0,3,0,5" Opacity="{Binding RowOpacity}">
                               <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>   <!-- 0 filename, full width -->
                                 <RowDefinition Height="Auto"/>   <!-- 1 state + route | actions -->
                                 <RowDefinition Height="Auto"/>   <!-- 2 park hint -->
                               </Grid.RowDefinitions>
-                              <TextBlock Grid.Row="0" Text="{Binding FileName}" Foreground="{StaticResource TextHi}"
+                              <TextBlock Grid.Row="0" Text="{Binding DisplayName}" Foreground="{StaticResource TextHi}"
                                          FontSize="11.5" TextTrimming="CharacterEllipsis"
                                          ToolTip="{Binding FileName}"/>
                               <Grid Grid.Row="1" Margin="0,3,0,0">
@@ -206,7 +208,7 @@
                                        token here), so this is not limited to short routing codes. A WPF
                                        Grid doesn't clip, so without this an oversized route would render straight
                                        over the action buttons in the Auto column beside it. -->
-                                  <TextBlock Text="{Binding RouteText}" Foreground="{StaticResource TextMid}" FontSize="10.5"
+                                  <TextBlock Text="{Binding RouteText}" Foreground="{StaticResource TextMid}" FontSize="11"
                                              VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                              ToolTip="{Binding RouteText}"/>
                                 </StackPanel>
@@ -232,11 +234,11 @@
                                   <Button Style="{StaticResource GhostButton}" Content="back to inbox" Visibility="{Binding BackVisibility}"
                                           Click="PromptBack_Click" FontSize="10" Padding="6,2" Margin="0,0,4,0"/>
                                   <Button Style="{StaticResource GhostButton}" Content="delete" Visibility="{Binding DeleteVisibility}"
-                                          Click="PromptDelete_Click" FontSize="10" Padding="6,2" Foreground="#E0918C"/>
+                                          Click="PromptDelete_Click" FontSize="10" Padding="6,2" Foreground="{StaticResource TextLo}"/>
                                 </StackPanel>
                               </Grid>
                               <TextBlock Grid.Row="2" Text="{Binding ParkHint}" Visibility="{Binding ParkHintVisibility}"
-                                         Foreground="{StaticResource TextLo}" FontSize="10" Margin="0,3,0,0"
+                                         Foreground="{StaticResource TextLo}" FontSize="11" Margin="0,3,0,0"
                                          TextTrimming="CharacterEllipsis"/>
                             </Grid>
                           </DataTemplate>
@@ -250,7 +252,7 @@
               <DataTemplate DataType="{x:Type local:AgentEvent}">
                 <!-- The card shell is deliberately UNIFORM: flat Surface, neutral hairline border. Project
                      identity lives on ONE element (the monogram chip in the secondary row) and the heavy-model
-                     state on ONE element (the inverted ⚡ toggle) — the earlier per-project wash + coloured
+                     state on ONE element (the filled model toggle) — the earlier per-project wash + coloured
                      border + fable red border stacked three meanings onto the card surfaces and none of them
                      read. Borders carry no meaning; don't re-hang one here. -->
                 <Border Style="{StaticResource EventCard}" ToolTip="{Binding Cwd}">
@@ -317,12 +319,13 @@
                           <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                          <!-- The MONOGRAM CHIP is the project-identity element — solid full-saturation fill +
-                               initials (Slack-workspace idiom), the one surface where five hues stay distinct
-                               on a dark theme (a wash or border crushes to near-black; a solid bright chip
-                               keeps its chroma, and the initials double-code it). Big on purpose: it announces
-                               the project, the muted name beside it just spells it out. -->
-                          <Border CornerRadius="6" Background="{Binding ProjectChipBrush}" Padding="9,3"
+                          <!-- The MONOGRAM CHIP is the project-identity element — INVERTED, a bright neutral fill
+                               with dark initials: identity rides brightness and the TEXT, status rides hue, so the
+                               two never compete for one channel (a hued chip beside a same-hued status pill read as
+                               one signal). A step below the title's white so the title stays the brightest thing on
+                               the card. Big on purpose: it announces the project, the muted name beside it just
+                               spells it out. -->
+                          <Border CornerRadius="6" Background="{StaticResource Accent}" Padding="9,3"
                                   Visibility="{Binding ProjectVisibility}" VerticalAlignment="Center"
                                   Cursor="Hand" MouseLeftButtonUp="Navigate_Click" ToolTip="Go to this session">
                             <TextBlock Text="{Binding ProjectMonogram}" FontSize="12.5" FontWeight="Bold"
@@ -336,7 +339,7 @@
                         <!-- RIGHT: the status pill, ALONE — and since the left accent bar is retired, THE one
                              status surface. Sized to match the monogram chip (same padding + font) so the two
                              row anchors (project left, status right) read as peers. The action buttons
-                             (⚡ / ↻ / ■ / ▶) live in the bottom actions row. -->
+                             (the toggles, archive, the replies) live in the bottom actions row. -->
                         <Border Grid.Column="1" Style="{StaticResource Pill}" Background="{Binding AccentTint}"
                                 Padding="9,3" Margin="8,0,0,0" VerticalAlignment="Center">
                           <TextBlock Style="{StaticResource PillText}" FontSize="12.5"
@@ -352,9 +355,9 @@
                            shows. A duplicate-bearing card shifting its content down a row is the cheaper evil. -->
                       <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,5,0,0"
                                   Visibility="{Binding DuplicateVisibility}">
-                        <Border Style="{StaticResource Pill}" Background="#33381840"
+                        <Border Style="{StaticResource Pill}" Background="#1AFFFFFF"
                                 ToolTip="Another live session has this exact name — a prompt YOU type may land in the wrong window. Tell them apart by the project chip, or rename one.">
-                          <TextBlock Style="{StaticResource PillText}" Text="&#x26A0; DUPLICATE NAME" Foreground="#C58AF0"/>
+                          <TextBlock Style="{StaticResource PillText}" Text="&#x26A0; DUPLICATE NAME" Foreground="{StaticResource TextHi}"/>
                         </Border>
                       </StackPanel>
 
@@ -362,14 +365,31 @@
                            borderless TextBox (NOT a TextBlock) so the text is SELECTABLE / copyable. NO fixed
                            height and NO reserve rule: it lives in the grid's * row, so it FILLS whatever the
                            optional rows don't use and scrolls inside when the text is longer. When Collapsed
-                           (idle rows) the * row simply stays blank — the bottom rows are pinned either way. -->
-                      <TextBox Grid.Row="3" Text="{Binding Detail, Mode=OneWay}"
-                               Visibility="{Binding DetailVisibility}"
-                               IsReadOnly="True" IsTabStop="False" Cursor="IBeam"
-                               BorderThickness="0" Background="Transparent" Padding="0" Margin="0,5,0,0"
-                               Foreground="{StaticResource TextMid}" FontSize="11.5"
-                               TextWrapping="Wrap" AcceptsReturn="True"
-                               VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"/>
+                           (idle rows) the * row simply stays blank — the bottom rows are pinned either way.
+                           A card that does not need you dims it one step (DetailBrush, with TitleBrush).
+                           Above it, the YOU block: your last prompt to this session (YouText), two lines at most,
+                           the whole of it on hover — your side of the exchange on a faint bubble, the agent's side
+                           below, so the detail keeps the agent's words alone. No "you" label: the bubble and its
+                           place say whose it is, as in a chat. It eats from the detail's * row. -->
+                      <Grid Grid.Row="3" Margin="0,5,0,0">
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto"/>
+                          <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Visibility="{Binding YouVisibility}" Background="#0DFFFFFF"
+                                CornerRadius="6" Padding="8,4" Margin="0,0,0,6" ToolTip="{Binding YouText}">
+                          <TextBlock Text="{Binding YouText}" Foreground="{StaticResource TextLo}" FontSize="11.5"
+                                     TextWrapping="Wrap" TextTrimming="CharacterEllipsis" LineHeight="16"
+                                     LineStackingStrategy="BlockLineHeight" MaxHeight="32"/>
+                        </Border>
+                        <TextBox Grid.Row="1" Text="{Binding Detail, Mode=OneWay}"
+                                 Visibility="{Binding DetailVisibility}"
+                                 IsReadOnly="True" IsTabStop="False" Cursor="IBeam"
+                                 BorderThickness="0" Background="Transparent" Padding="0" Margin="0"
+                                 Foreground="{Binding DetailBrush}" FontSize="12.5"
+                                 TextWrapping="Wrap" AcceptsReturn="True"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"/>
+                      </Grid>
 
                       <!-- TODO LIST (#3): a compact "<done>/<total> · <current item>" summary; click to expand
                            the full checklist (glyph + status colour per item). Hidden when the session never
@@ -425,9 +445,9 @@
                         </ProgressBar>
                         <TextBlock Grid.Column="1" Text="{Binding ContextText}" Visibility="{Binding ContextVisibility}"
                                    Foreground="{StaticResource TextLo}" FontFamily="{StaticResource MonoFont}"
-                                   FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                   FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="{Binding TimeText}" Foreground="{StaticResource TextLo}"
-                                   FontSize="10.5" Margin="10,0,0,0" VerticalAlignment="Center"
+                                   FontSize="11" Margin="10,0,0,0" VerticalAlignment="Center"
                                    Typography.NumeralAlignment="Tabular"/>
                       </Grid>
 
@@ -441,47 +461,33 @@
                       <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0"
                                   Visibility="{Binding PermissionAnswerVisibility}">
                         <Button Style="{StaticResource GhostButton}"
-                                Content="allow once" Padding="9,2" FontSize="10.5" Cursor="Hand"
-                                Foreground="#5FB87A" Click="Allow_Click"
+                                Content="allow once" Padding="9,2" FontSize="10.5" FontWeight="SemiBold" Cursor="Hand"
+                                Foreground="{StaticResource TextHi}" Click="Allow_Click"
                                 ToolTip="Allow just this request — not a blanket grant (that's auto-allow)"/>
                         <Button Style="{StaticResource GhostButton}"
                                 Content="deny" Padding="9,2" Margin="6,0,0,0" FontSize="10.5" Cursor="Hand"
-                                Foreground="#E0524D" Click="Deny_Click" ToolTip="Deny this request"/>
+                                Click="Deny_Click" ToolTip="Deny this request"/>
                       </StackPanel>
 
-                      <!-- BOTTOM ROW: auto-allow floats on the LEFT, the send-a-prompt menu on the RIGHT — one
-                           line, each shown independently of the other. -->
+                      <!-- SEND ROW: the model toggle on the LEFT, the send-a-prompt menu on the RIGHT (auto-allow is
+                           the actions row's `auto` toggle below). -->
                       <Grid Grid.Row="7" Margin="0,5,0,0">
                         <Grid.ColumnDefinitions>
                           <ColumnDefinition Width="*"/>
                           <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- AUTO-ALLOW: per-session "stop asking me" switch (real session cards only). When ON,
-                             Mastermind answers this session's PermissionRequest allow off autoallow.json — over its
-                             HTTP entry while it runs, through the exe's own hook entry while it is closed. Loud
-                             when ON — it's a safety-off switch. Click is Handled in AutoAllow_Click so toggling
-                             never also navigates the card. Content/Foreground/FontWeight live in the Style (not
-                             as local values) so the IsChecked trigger can override them. -->
-                        <CheckBox Grid.Column="0" Visibility="{Binding AutoAllowVisibility}"
-                                  IsChecked="{Binding AutoAllow, Mode=TwoWay}"
-                                  Click="AutoAllow_Click" Cursor="Hand"
-                                  HorizontalAlignment="Left" VerticalAlignment="Center"
-                                  FontSize="10.5" VerticalContentAlignment="Center">
-                          <CheckBox.Style>
-                            <Style TargetType="CheckBox">
-                              <Setter Property="Content" Value="auto-allow this session"/>
-                              <Setter Property="Foreground" Value="{StaticResource TextLo}"/>
-                              <Setter Property="FontWeight" Value="Normal"/>
-                              <Style.Triggers>
-                                <Trigger Property="IsChecked" Value="True">
-                                  <Setter Property="Content" Value="auto-allow ON — runs without asking"/>
-                                  <Setter Property="Foreground" Value="{StaticResource TextHi}"/>
-                                </Trigger>
-                              </Style.Triggers>
-                            </Style>
-                          </CheckBox.Style>
-                        </CheckBox>
+                        <!-- MODEL toggle: flips the session between default and heavy over CDP (prompts.json's
+                             model_on / model_off). It is ALSO the heavy-model indicator (the toggle-button idiom):
+                             solid red fill + white text while heavy — red is the cost hue — dim text when default;
+                             the one heavy-model surface. Text, never ⚡: ⚡ is Claude Code's own fast-mode mark, and
+                             the label is the heavy model's name (heavy_match), so it says what it switches to. -->
+                        <Button Grid.Column="0" Style="{StaticResource ModelButton}" Visibility="{Binding ModelToggleVisibility}"
+                                Content="{Binding ModelToggleLabel}" Padding="8,2" HorizontalAlignment="Left"
+                                FontSize="10.5" Cursor="Hand"
+                                Background="{Binding ModelToggleBg}" Foreground="{Binding ModelGlyphBrush}"
+                                Click="ModelToggle_Click" VerticalAlignment="Center"
+                                ToolTip="{Binding ModelToggleTip}"/>
 
                         <!-- SEND A PROMPT: right-aligned. Opens the confirm-before-send picker (SendMenu_Click →
                              PickerWindow) over the one PromptPresets.All source; the chosen prompt is injected into
@@ -493,30 +499,40 @@
                                 Click="SendMenu_Click" ToolTip="Pick a canned prompt to send to this session"/>
                       </Grid>
 
-                      <!-- ACTIONS ROW — its own line BELOW auto-allow/send (cramming these beside the checkbox
-                           truncated its label). LEFT: ⚡ model toggle. RIGHT: the quick replies `rec` · `go`
-                           (FINISHED / WAITING FOR YOU) or the STALLED? pill (WORKING, or
-                           WAITING past half an hour) — never both, so they share the
-                           cell, and the replies sit as far from ⚡ as the card allows. -->
+                      <!-- ACTIONS ROW — its own line BELOW send. LEFT: the `auto` toggle, then archive. RIGHT: the
+                           quick replies `rec` · `go` (FINISHED / WAITING FOR YOU) or the STALLED? pill (WORKING, or
+                           WAITING past half an hour) — never both, so they share the cell, and the replies sit as far
+                           from the toggle as the card allows. -->
                       <Grid Grid.Row="8" Margin="0,5,0,0">
                         <Grid.ColumnDefinitions>
                           <ColumnDefinition Width="*"/>
                           <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <!-- MODEL toggle: flips the session between default and heavy over CDP (prompts.json's
-                             model_on / model_off). It is ALSO the heavy-model indicator (pressed-toggle idiom):
-                             solid hot-red bg + white ⚡ while heavy, ghost grey when default — the one fable
-                             surface (red card border + FABLE pill are retired). Fixed square chip, no text
-                             padding: the ⚡ glyph's font metrics sit LOW in its em box, so padding-based
-                             centering parked it on the button's floor — a sized box + centered presenter +
-                             an optical lift is what actually centers it. -->
-                        <Button Style="{StaticResource ModelButton}" Visibility="{Binding ModelToggleVisibility}"
-                                Content="&#x26A1;" Width="26" Height="21" Padding="0" Margin="0,0,7,0"
-                                FontSize="11.5" Cursor="Hand"
-                                Background="{Binding ModelToggleBg}" Foreground="{Binding ModelGlyphBrush}"
-                                Click="ModelToggle_Click" VerticalAlignment="Center"
-                                ToolTip="{Binding ModelToggleTip}"/>
+                        <!-- AUTO-ALLOW: per-session "stop asking me" switch (real session cards only). When ON,
+                             Mastermind answers this session's PermissionRequest allow off autoallow.json — over its
+                             HTTP entry while it runs, through the exe's own hook entry while it is closed. A text
+                             toggle (TextToggle): ON a filled neutral chip, off dim text; the sentence is the tooltip.
+                             Click is Handled in AutoAllow_Click so toggling never also navigates the card. -->
+                        <CheckBox Style="{StaticResource TextToggle}" Content="auto" FontSize="10.5" Padding="8,2"
+                                  Margin="0,0,4,0" VerticalAlignment="Center"
+                                  Visibility="{Binding AutoAllowVisibility}" IsChecked="{Binding AutoAllow, Mode=TwoWay}"
+                                  Click="AutoAllow_Click">
+                          <CheckBox.ToolTip>
+                            <TextBlock>
+                              <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                  <Setter Property="Text" Value="auto-allow this session"/>
+                                  <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AutoAllow}" Value="True">
+                                      <Setter Property="Text" Value="auto-allow ON — runs without asking"/>
+                                    </DataTrigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </TextBlock.Style>
+                            </TextBlock>
+                          </CheckBox.ToolTip>
+                        </CheckBox>
                         <!-- ARCHIVE: the extension's own archive, driven from this card, then the idle process
                              stopped — idle cards only (ArchiveVisibility). Two clicks: the first arms. -->
                         <Button Style="{StaticResource GhostButton}" Visibility="{Binding ArchiveVisibility}"
@@ -525,28 +541,29 @@
                                 ToolTip="Archive this session and stop its idle process — click twice (the first click arms it)"/>
                         </StackPanel>
                         <!-- QUICK REPLIES: `rec` sends prompts.json's `rec` ("as you recommend"), `go` its `go` — only
-                             on a card whose agent handed you the turn. Two clicks: the first arms (amber "go?"), the
-                             second sends (ArmOrFire). Refuse over a hand-typed draft. -->
+                             on a card whose agent handed you the turn. Two clicks: the first arms (bright "go?"), the
+                             second sends (ArmOrFire). Refuse over a hand-typed draft. Neutral at rest — a hue here
+                             would claim a status. -->
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                                     Visibility="{Binding ReplyVisibility}">
                           <Button Style="{StaticResource GhostButton}"
                                   Content="rec" Padding="12,2" Margin="0,0,6,0" FontSize="11" FontWeight="SemiBold"
-                                  Cursor="Hand" Foreground="{StaticResource Blue}" Click="Rec_Click"
+                                  Cursor="Hand" Click="Rec_Click"
                                   VerticalAlignment="Center"
                                   ToolTip="Send &quot;as you recommend&quot; — click twice (the first click arms it)"/>
                           <Button Style="{StaticResource GhostButton}"
                                   Content="go" Padding="12,2" FontSize="11" FontWeight="SemiBold" Cursor="Hand"
-                                  Foreground="{StaticResource Green}" Click="Go_Click" VerticalAlignment="Center"
+                                  Click="Go_Click" VerticalAlignment="Center"
                                   ToolTip="Send &quot;go&quot; — click twice (the first click arms it)"/>
                         </StackPanel>
                         <!-- STALL marker (#1): a WORKING card with no tool starting or finishing for three minutes, or
                              a WAITING card past half an hour; a prompt to go and look, never a verdict. Deliberately
                              NOT in the "who needs you" count. Plain StallVisibility (no reserve rule): the HOST row is
                              always present, so a hidden pill costs no height either way. -->
-                        <Border Grid.Column="1" Style="{StaticResource Pill}" Background="#33402810"
+                        <Border Grid.Column="1" Style="{StaticResource Pill}" Background="#206E7E8F"
                                 VerticalAlignment="Center" Visibility="{Binding StallVisibility}"
                                 ToolTip="{Binding StallTip}">
-                          <TextBlock Style="{StaticResource PillText}" Text="STALLED?" Foreground="#E89A52"/>
+                          <TextBlock Style="{StaticResource PillText}" Text="STALLED?" Foreground="{StaticResource TextHi}"/>
                         </Border>
                       </Grid>
                     </Grid>
@@ -560,24 +577,20 @@
 
       <!-- ========================= BIG COUNT ============================ -->
       <!-- The log strip's place while it is hidden, at its height so the cards never jump: who needs you, big enough
-           to read from across the room. Fades out at zero, pops on a rise; its colour and the pop are UpdateCount's. -->
+           to read from across the room, its label under it in the band the numeral's line box leaves below the
+           digit's baseline. Fades out at zero, pops on a rise; its colour and the pop are UpdateCount's. -->
       <Border x:Name="BigCount" Grid.Row="2" Height="138" Visibility="Collapsed" IsHitTestVisible="False">
-        <StackPanel x:Name="BigCountBody" Orientation="Horizontal" HorizontalAlignment="Left"
-                    VerticalAlignment="Bottom" Margin="20,0,0,0" Opacity="0">
+        <Grid x:Name="BigCountBody" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20,0,0,0" Opacity="0">
           <TextBlock x:Name="BigCountText" Text="0" FontFamily="{StaticResource Display}" FontSize="128"
-                     FontWeight="SemiBold" Foreground="{StaticResource Accent}"
+                     FontWeight="SemiBold" Foreground="{StaticResource Blue}"
                      LineStackingStrategy="BlockLineHeight" LineHeight="134" RenderTransformOrigin="0,1">
             <TextBlock.RenderTransform>
               <ScaleTransform x:Name="BigCountScale"/>
             </TextBlock.RenderTransform>
-            <TextBlock.Effect>
-              <DropShadowEffect x:Name="BigCountGlow" Color="{StaticResource AccentColor}" BlurRadius="32"
-                                ShadowDepth="0" Opacity="0.7"/>
-            </TextBlock.Effect>
           </TextBlock>
           <TextBlock Text="NEED YOU" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextLo}"
-                     VerticalAlignment="Bottom" Margin="12,0,0,32"/>
-        </StackPanel>
+                     HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,8"/>
+        </Grid>
       </Border>
 
       <!-- ====================== ACTIVITY LOG ========================== -->
@@ -591,7 +604,7 @@
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
           <Grid Grid.Row="0" Margin="15,7,10,3">
-            <TextBlock Text="ACTIVITY LOG" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource TextLo}"
+            <TextBlock Text="ACTIVITY LOG" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextLo}"
                        VerticalAlignment="Center"/>
             <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Content="Clear"
                     Padding="7,1" Click="ClearLog_Click"/>
@@ -619,7 +632,7 @@
       <Border Grid.Row="3" Padding="16,9,14,12">
         <Grid>
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <Ellipse Width="6" Height="6" Fill="{StaticResource Green}" VerticalAlignment="Center"/>
+            <Ellipse Width="6" Height="6" Fill="{StaticResource TextMid}" VerticalAlignment="Center"/>
             <TextBlock x:Name="StatusLine" Text="listening on 127.0.0.1:7778"
                        Foreground="{StaticResource TextLo}" FontSize="11" Margin="7,0,0,0" VerticalAlignment="Center"/>
           </StackPanel>

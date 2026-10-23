@@ -86,8 +86,8 @@ public partial class App : System.Windows.Application
         _store = new SessionStore(ProjectList.IsHidden, ProjectList.Order);
         _log = new LogStore(System.IO.Path.Combine(Config.Current.LogDir, "mastermind_activity.log"));
         _reconciler = new WindowReconciler(new VsCodeProbe(), new SessionScanner(), _store);
-        var dispatcher = new PromptDispatcher(_log, _ => Dispatcher.Invoke(() => _store.SyncAutoAllow()));
-        _prompts = new PromptStore(it => dispatcher.Transport(it), dispatcher.CleanStaging, dispatcher.MoveAutoAllow);   // auto-move → Transport (synchronous File.Move; return path discarded)
+        var dispatcher = new PromptDispatcher(_log);
+        _prompts = new PromptStore(it => dispatcher.Transport(it), dispatcher.CleanStaging);   // auto-move → Transport (synchronous File.Move; return path discarded)
         _win = new MainWindow(_store, _reconciler, _log, _prompts, dispatcher);
         // Config's and every other early warning was held (Warnings) — replay them into the activity log now that the
         // window that toasts a Warn exists, and route each later one the same way. Queued: one can come off any thread.
@@ -97,7 +97,7 @@ public partial class App : System.Windows.Application
         // The activity log starts fresh each run, so the run a settings change started names it.
         if (restartFor != null)
             _log.Add(LogKind.Info, $"config · restarted for {string.Join(", ", _restartedFor)}");
-        // What config made of the manifest — the card order, chip labels, config colours and hidden projects.
+        // What config made of the manifest — the card order, chip labels and hidden projects.
         _log.Add(LogKind.Info, ProjectList.Describe());
         // A SessionEnd sent while Mastermind was down is lost, so the auto-allow map is cleaned here instead: an entry whose
         // session no longer runs goes, and a resumed session re-prompts — unless session restore brings it back, which
@@ -121,7 +121,7 @@ public partial class App : System.Windows.Application
         _hub.Refused += line => Dispatcher.BeginInvoke(new Action(() => _log.Add(LogKind.Warn, "refused " + line)));
         // The VS Code windows' shells on /client — built here, on the UI thread its debounce timer runs on.
         _clients = new ClientHub(_store, (kind, text) => _log.Add(kind, text), () => _win.ShowPanel(force: true),
-                                 Restart, _restartedFor, Dispatcher);
+                                 ExitApp, Restart, _restartedFor, Dispatcher);
         _restore = new SessionRestore(_clients, () => _store.SyncAutoAllow(), (kind, text) => _log.Add(kind, text), Dispatcher);
         _clients.WindowConnected += _restore.Connected;       // a window that came back gets its sessions
         _clients.HealthReloaded += _restore.HealthReloaded;   // Reload panels ends them with the window still connected
@@ -289,13 +289,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // A model switch moves the ⚡ toggle and nothing else — no status, no card swap, no panel. The hook's model
+        // A model switch moves the model toggle and nothing else — no status, no card swap, no panel. The hook's model
         // outranks every later transcript read of this session (SessionStore.SetHookModel).
         if (ev.Kind == RawKind.PostModelSwitch)
         {
             if (_store.SetHookModel(ev.SessionId, ev.Model)) _log.Add(LogKind.Info, $"{tag} → model {ev.Model}");
             return;
         }
+
+        // Your prompt outlives a restart: a long turn's output can push it past the transcript tail the scan reads.
+        if (ev.Kind == RawKind.UserPromptSubmit && !string.IsNullOrEmpty(ev.YouText))
+            StatusCache.RecordPrompt(ev.SessionId, ev.YouText);
 
         // The session's card as it stands — nothing below changes it before the last guard reads it.
         var current = _store.CurrentStatus(ev.SessionId);
@@ -341,7 +345,7 @@ public partial class App : System.Windows.Application
         // update its live-action detail line. No log, no panel — it's already in the right state.
         if ((ev.Kind == RawKind.UserPromptSubmit || toolPing) && current == AgentStatus.Working)
         {
-            _store.TouchWorking(ev.SessionId, ev.When, ev.Detail);
+            _store.TouchWorking(ev.SessionId, ev.When, ev.Detail, ev.YouText);
             return;
         }
 
@@ -365,13 +369,20 @@ public partial class App : System.Windows.Application
             case RawKind.SessionEnd:
                 _log.Add(LogKind.Info, tag + " → session ended, removed");
                 StatusCache.Remove(ev.SessionId);
-                AutoAllowStore.Remove(ev.SessionId);   // a resumed id re-prompts — only session restore sets it again
+                AutoAllowStore.Remove(ev.SessionId);   // a resumed id starts over — its SessionStart or session restore sets it again
                 _store.RemoveSession(ev.SessionId);
                 break;
 
             case RawKind.SessionStart:
-                _log.Add(LogKind.Event, tag + " → listed");
+                // Config's newSessionAutoAllow: every session starts auto-allow ON — a fresh one, a /clear's, a resumed
+                // one unless a person switched it off while session restore recorded it — never on a compaction, the
+                // same session going on, where an off set mid-session stands. Never in a hidden project (Arm).
+                bool armed = Config.Current.NewSessionAutoAllow && p.Source != "compact"
+                    && !(p.Source == "resume" && _restore.SwitchedOff(ev.SessionId))
+                    && AutoAllowStore.Arm(ev.SessionId, ev.Cwd);
+                _log.Add(LogKind.Event, tag + (armed ? " → listed, auto-allow on" : " → listed"));
                 _store.AddEvent(ev);                     // list it quietly — no focus steal
+                if (armed) _store.SyncAutoAllow();       // the card was built off the map before the arm
                 break;
 
             case RawKind.UserPromptSubmit:
@@ -473,14 +484,14 @@ public partial class App : System.Windows.Application
         UpdateTrayIcon(need, _store.Events.Any(e => e.Status == AgentStatus.NeedsPermission), health.Count > 0);
     }
 
-    /// <summary>The count on a disc over the web's upper-left corner, the empty one — blue, red while a session waits on
-    /// a permission; VS Code health's orange triangle over its lower-left while a window is in its error band; the plain
+    /// <summary>The count on a disc over the web's upper-left corner, the empty one — blue, amber (the NEEDS PERMISSION
+    /// pill's) while a session waits on a permission; VS Code health's orange triangle over its lower-left while a window is in its error band; the plain
     /// web with neither, and "9+" past nine, since a 16 px icon has no room for two digits. Redrawn only when what it
     /// shows changes.</summary>
     private void UpdateTrayIcon(int need, bool permission, bool health)
     {
         string text = need > 9 ? "9+" : need.ToString();
-        string shows = (need == 0 ? "" : text + (permission ? " red" : " blue")) + (health ? " health" : "");
+        string shows = (need == 0 ? "" : text + (permission ? " amber" : " blue")) + (health ? " health" : "");
         if (shows == _trayDrawn) return;
         _trayDrawn = shows;
         var old = _trayCount;
@@ -670,7 +681,7 @@ public partial class App : System.Windows.Application
 
     /// <summary>The tray icon — Mastermind's cobweb (mastermind.ico, embedded; make_mastermind_icon.py draws it), at the
     /// size Windows gives a small icon at this DPI. Every size in the file is drawn on its own pixel grid, so the
-    /// threads stay crisp where scaled ones blur away. Falls back to the drawn terracotta tile if the resource
+    /// threads stay crisp where scaled ones blur away. Falls back to the drawn indigo tile if the resource
     /// can't be read, so the tray always has an icon.</summary>
     private static Icon MakeIcon()
     {
@@ -684,7 +695,7 @@ public partial class App : System.Windows.Application
         return DrawFallbackIcon();
     }
 
-    /// <summary>Draw a tray icon at runtime — a rounded terracotta tile with a spark. Fallback only.</summary>
+    /// <summary>Draw a tray icon at runtime — a rounded tile in the cobweb's indigo with a spark. Fallback only.</summary>
     private static Icon DrawFallbackIcon()
     {
         using var bmp = new Bitmap(32, 32);
@@ -693,8 +704,8 @@ public partial class App : System.Windows.Application
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using var grad = new LinearGradientBrush(
                 new Rectangle(0, 0, 32, 32),
-                ColorTranslator.FromHtml("#E89072"),
-                ColorTranslator.FromHtml("#C65F3F"),
+                ColorTranslator.FromHtml("#8280FF"),
+                ColorTranslator.FromHtml("#5A57D1"),
                 LinearGradientMode.ForwardDiagonal);
             using (var path = Rounded(new Rectangle(2, 2, 28, 28), 8))
                 g.FillPath(grad, path);
@@ -713,7 +724,7 @@ public partial class App : System.Windows.Application
     /// and VS Code health's orange triangle over its lower-left when <paramref name="health"/>; the web's anchor in the
     /// lower-right stays uncovered. Grayscale
     /// antialiasing: ClearType on a transparent bitmap fringes the digit.</summary>
-    private static Icon DrawMarks(Icon web, string text, bool red, bool health)
+    private static Icon DrawMarks(Icon web, string text, bool permission, bool health)
     {
         int size = web.Width;
         using var bmp = new Bitmap(size, size);
@@ -726,10 +737,11 @@ public partial class App : System.Windows.Application
             {
                 float d = size * 0.7f;
                 var disc = new RectangleF(0, 0, d, d);
-                using var fill = new SolidBrush(ColorTranslator.FromHtml(red ? "#D13438" : "#0078D4"));
+                // Amber takes a dark digit: white on it reads at about 2:1.
+                using var fill = new SolidBrush(ColorTranslator.FromHtml(permission ? "#E0A458" : "#0078D4"));
                 g.FillEllipse(fill, disc);
                 using var font = new Font("Segoe UI", d * (text.Length > 1 ? 0.52f : 0.72f), System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
-                using var ink = new SolidBrush(Color.White);
+                using var ink = new SolidBrush(permission ? ColorTranslator.FromHtml("#101015") : Color.White);
                 using var center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                 g.DrawString(text, font, ink, disc, center);
             }

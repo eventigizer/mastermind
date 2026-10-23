@@ -26,6 +26,9 @@ const RELOAD_WEBVIEWS = 'workbench.action.webview.reloadWebviewAction';
 const RELOAD_WINDOW = 'workbench.action.reloadWindow';
 const LINKED = ['mastermind.health.restart', 'mastermind.health.reloadWebviews', 'mastermind.health.reloadWindow', 'mastermind.health.debugPortStep'];
 const RANK: Record<Level, number> = { ok: 0, warning: 1, error: 2 };
+// A level rises at its share and falls only this far below it: a heap counting garbage swings across a line, and the
+// item would show and hide with each collection.
+const MARGIN = 0.05;
 // A modal dialog's only button: with isCloseAffordance set it replaces VS Code's own Cancel, so the dialog reads OK alone.
 const OK: vscode.MessageItem = { title: 'OK', isCloseAffordance: true };
 
@@ -53,7 +56,8 @@ function parse(m: Message): Reading | undefined {
  * VS Code health's status-bar item (phase 3b): the exe reads this window's language servers and Claude panel; this item
  * judges each against its own ceiling with the window's limits — shares of that ceiling, kept here and never mirrored,
  * so a change restarts nothing — and judges the reading it holds again every 5 s, since the exe sends one only on a
- * change. It shows the worst past its warning share, restarts a server in its error band once no
+ * change. It shows the worst past its warning share — each level falling only a margin below the share it rose at —
+ * restarts a server in its error band once no
  * file has been opened, changed or closed for the quiet wait (at most once per cooldown per server), and reports its
  * level to the exe for the tray. The panel's reloads restart every Claude session of the window, so they run on a
  * click only; they and every automatic restart wait on the exe's fresh word that each session there is idle — a
@@ -70,6 +74,7 @@ export class Health implements vscode.Disposable {
   private readonly lastAuto = new Map<Kind, number>();
   private readonly restarting = new Map<Kind, { pid: number; mb: number; at: number; automatic: boolean }>();
   private readonly failures = new Map<Kind, { text: string; pid: number }>(); // automatic restarts that failed, on the item
+  private readonly levels = new Map<Item, Level>(); // each item's last level, which it falls from only past the margin
   private checking = false; // an automatic restart's busy check is out — the next tick waits for it
   private reported = 'ok|'; // the exe starts each window at ok, so nothing goes out until the level moves
 
@@ -121,7 +126,15 @@ export class Health implements vscode.Disposable {
     const warning = settings().get<number>(`${item}.warningPercent`, 60) / 100;
     const error = settings().get<number>(`${item}.errorPercent`, 75) / 100;
     const share = mb / ceilingMb;
-    return { item, mb, ceilingMb, share, level: share >= error ? 'error' : share >= warning ? 'warning' : 'ok' };
+    const was = this.levels.get(item) ?? 'ok';
+    const level: Level =
+      share >= error || (was === 'error' && share >= error - MARGIN)
+        ? 'error'
+        : share >= warning || (was !== 'ok' && share >= warning - MARGIN)
+          ? 'warning'
+          : 'ok';
+    this.levels.set(item, level);
+    return { item, mb, ceilingMb, share, level };
   }
 
   private rows(): Row[] {
@@ -181,17 +194,17 @@ export class Health implements vscode.Disposable {
     const shown = healthEnabled() && this.open && this.reading !== undefined && ((worst !== undefined && worst.level !== 'ok') || problem);
     if (shown) {
       const past = worst !== undefined && worst.level !== 'ok';
-      // A panel worst offender in a busy window waits: a reload would restart a working agent, so no click is offered.
-      const waiting = past && worst.item === 'panel' && this.reading?.busy === true;
       const restartingWorst = past && worst.item !== 'panel' && this.restarting.has(worst.item);
+      // The label never follows the agents' turns: a busy window's reload waits, said in the tooltip and, on a click,
+      // in the refusal's dialog.
       this.item.text = !past
         ? '$(warning) Health'
         : restartingWorst
           ? `$(sync~spin) ${LABEL[worst.item]} restarting`
-          : `$(pulse) ${LABEL[worst.item]} ${gb(worst.mb)} GB${waiting ? ' — waiting for agents' : ''}`;
+          : `$(pulse) ${LABEL[worst.item]} ${gb(worst.mb)} GB`;
       this.item.backgroundColor = new vscode.ThemeColor(worst?.level === 'error' ? 'statusBarItem.errorBackground' : 'statusBarItem.warningBackground');
       this.item.tooltip = this.tooltip(problem);
-      this.item.command = waiting ? undefined : 'mastermind.health.free';
+      this.item.command = 'mastermind.health.free';
       this.item.show();
     } else this.item.hide();
     this.report(shown ? worst : undefined);

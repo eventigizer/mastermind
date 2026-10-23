@@ -403,7 +403,7 @@ function check(name, fn) {
     hookPort: 7778,
     debugPort: 9222,
     startAtLogin: true,
-    newDispatchAutoAllow: true,
+    newSessionAutoAllow: true,
     handoffs: { enabled: true, outbox: 'tmp' },
     whatsappEfficiencyFix: true,
   };
@@ -415,7 +415,7 @@ function check(name, fn) {
     assert.strictEqual(settings['mastermind.hookPort'], 7778);
     assert.strictEqual(settings['mastermind.debugPort'], 9333);
     assert.strictEqual(settings['mastermind.startAtLogin'], true);
-    assert.strictEqual(settings['mastermind.newDispatchAutoAllow'], true);
+    assert.strictEqual(settings['mastermind.newSessionAutoAllow'], true);
     assert.strictEqual(settings['mastermind.relay'], true);
     assert.ok(!Object.keys(settings).some((k) => k.includes('whatsapp')));
     assert.strictEqual(globalState.get('mastermind.imported'), true);
@@ -477,7 +477,7 @@ function check(name, fn) {
     });
     assert.strictEqual(es.sent[1].type, 'settings');
     assert.strictEqual(es.sent[1].connect, true);
-    assert.deepStrictEqual(Object.keys(es.sent[1].values).sort(), ['debugPort', 'handoffs.enabled', 'hookPort', 'newDispatchAutoAllow', 'startAtLogin']);
+    assert.deepStrictEqual(Object.keys(es.sent[1].values).sort(), ['debugPort', 'handoffs.enabled', 'hookPort', 'newSessionAutoAllow', 'startAtLogin']);
     assert.strictEqual(es.sent[1].values.debugPort, 0);
   });
   const finished = { title: 'b', project: 'FE', status: 'FINISHED', state: 'finished' };
@@ -510,8 +510,8 @@ function check(name, fn) {
     id: get.id,
     ok: true,
     projects: [
-      { root: proj, name: path.basename(proj), token: 'FE', label: '', colour: '', hide: false, manifest: false },
-      { root: path.join(FIXTURES, 'wired'), name: 'wired', token: 'BE', label: '', colour: '', hide: false, manifest: true },
+      { root: proj, name: path.basename(proj), token: 'FE', label: '', hide: false, manifest: false },
+      { root: path.join(FIXTURES, 'wired'), name: 'wired', token: 'BE', label: '', hide: false, manifest: true },
     ],
   });
   await projectsOpen;
@@ -520,7 +520,7 @@ function check(name, fn) {
     assert.ok(e.panel && e.panel.webview.html.includes('"manifest":true') && e.panel.webview.html.includes('"token":"FE"'));
   });
   e.answers['Save?'] = 'Save';
-  e.panel.receive({ type: 'save', rows: [{ root: proj, name: path.basename(proj), token: 'FE2', label: '', colour: '', hide: false, manifest: false }] });
+  e.panel.receive({ type: 'save', rows: [{ root: proj, name: path.basename(proj), token: 'FE2', label: '', hide: false, manifest: false }] });
   await wait(20);
   const saved = es.sent[es.sent.length - 1];
   check('projects: a changed code asks first, then the save sends the rows', () => {
@@ -680,7 +680,8 @@ function check(name, fn) {
   k.close();
 
   // L — VS Code health: hidden under its warning share; the worst offender past it; the automatic restart inside the
-  // quiet wait and the cooldown, on the item's own 5 s clock; the panel's reload refused while busy; the switch.
+  // quiet wait and the cooldown, on the item's own 5 s clock; the panel's reload refused while busy; the levels'
+  // margin; the switch.
   reset({ ports: [7778] });
   globalState.set('mastermind.imported', true);
   offset = 0;
@@ -742,9 +743,9 @@ function check(name, fn) {
   check('health: past the cooldown and idle it restarts again', () => assert.strictEqual(tsRestarts(), 2));
   const panel = { state: 'ok', mb: 3500, limitMb: 4192, error: null };
   ls.receive({ type: 'health', servers: [], panel, busy: true, why: 'a session is working', error: null });
-  check('health: in a busy window the panel item waits for its agents, offers no click and says why', () => {
-    assert.ok(health(l).text.endsWith('waiting for agents'));
-    assert.strictEqual(health(l).command, undefined);
+  check('health: in a busy window the panel item keeps its label and its click, and the tooltip says why a reload waits', () => {
+    assert.strictEqual(health(l).text, '$(pulse) Claude panel 3.4 GB');
+    assert.strictEqual(health(l).command, 'mastermind.health.free');
     assert.ok(health(l).tooltip.value.includes('reload once every agent'));
     assert.ok(health(l).tooltip.value.includes('a session is working'));
   });
@@ -768,6 +769,22 @@ function check(name, fn) {
     assert.ok(ls.last('health.reloaded'));
     assert.ok(l.executed.some(([id]) => id === 'workbench.action.webview.reloadWebviewAction'));
   });
+  // A level falls only 5 points of its ceiling below the share it rose at — the panel above sat in its error band.
+  const panelAt = (mb) => ls.receive({ type: 'health', servers: [], panel: { ...panel, mb }, busy: false, why: null, error: null });
+  panelAt(3000);
+  check('health: a reading just under the error share holds the error band', () =>
+    assert.strictEqual(health(l).backgroundColor.id, 'statusBarItem.errorBackground'));
+  panelAt(2400);
+  check('health: past the margin it falls to the warning band, which a reading just under its share holds shown', () => {
+    assert.strictEqual(health(l).visible, true);
+    assert.strictEqual(health(l).backgroundColor.id, 'statusBarItem.warningBackground');
+  });
+  panelAt(2200);
+  check('health: past the margin under the warning share the item hides', () => assert.strictEqual(health(l).visible, false));
+  panelAt(2450);
+  check('health: rising again, it stays hidden under the warning share', () => assert.strictEqual(health(l).visible, false));
+  panelAt(2520);
+  check('health: and shows at the warning share', () => assert.strictEqual(health(l).visible, true));
   await l.vscode.workspace.getConfiguration('mastermind.health').update('enabled', false);
   check('health: the switch off goes to the exe and hides the item', () => {
     assert.deepStrictEqual(ls.last('health.switch'), { type: 'health.switch', on: false });

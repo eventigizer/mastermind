@@ -144,7 +144,7 @@ No agent reads or writes inside another project. Mastermind alone moves handoffs
 | Row | Where | Means | You can |
 |---|---|---|---|
 | `TO SEND` | outbox | finished, not delivered yet | `move ▸`, while auto-move is off |
-| `WAITING` | inbox | delivered; its project is open in VS Code | `new`, `send ▾` |
+| `READY` | inbox | delivered; its project is open in VS Code | `new`, `send ▾` |
 | `PARKED` | inbox | delivered; its project is not open in VS Code | wait — `new` and `send ▾` turn on with the window |
 | `TYPED` | processing | handed over with the debug port off, not sent yet | `back to inbox` |
 | `PROCESSING` | processing | an agent has it | — |

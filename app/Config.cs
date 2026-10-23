@@ -1,7 +1,6 @@
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace Mastermind;
 
@@ -24,7 +23,7 @@ internal sealed record AppConfig
     public string Inbox { get; init; }
     public string Processing { get; init; }
     public string DispatchText { get; init; }            // {path} = the file's path from the project root
-    public bool NewDispatchAutoAllow { get; init; }
+    public bool NewSessionAutoAllow { get; init; }
     public bool WhatsappEfficiencyFix { get; init; }
     public bool StartAtLogin { get; init; }
 
@@ -66,21 +65,10 @@ internal static class Config
     public static AppConfig Current => _current.Value;
 
     private static readonly string[] TopKeys = { "hookPort", "debugPort", "claudeDir", "editor", "manifestPath",
-        "promptsPath", "logDir", "projects", "handoffs", "newDispatchAutoAllow", "whatsappEfficiencyFix", "startAtLogin" };
+        "promptsPath", "logDir", "projects", "handoffs", "newSessionAutoAllow", "whatsappEfficiencyFix", "startAtLogin" };
     private static readonly string[] EditorKeys = { "userDataDir", "processName", "cli" };
     private static readonly string[] HandoffKeys = { "enabled", "outbox", "inbox", "processing", "dispatchText" };
-    private static readonly string[] ProjectKeys = { "root", "token", "label", "colour", "hide" };
-
-    // Two hues are reserved — a chip wearing either would impersonate that signal: amber, the attention colour (the
-    // NEEDS PERMISSION status, AgentEvent's CAmber; the incoming-prompts inbox card; App.xaml's Amber), and red, the
-    // heavy-model toggle (AgentEvent's CFable).
-    private static readonly string[] ReservedHues = { "#E0A458", "#FF3B30" };
-    private static readonly Regex Hex = new(@"^#[0-9A-Fa-f]{6}$");
-
-    /// <summary>A colour a project's chip may wear: #RRGGBB and neither reserved hue — the reader's rule and the
-    /// projects page's.</summary>
-    public static bool IsChipColour(string colour) =>
-        colour != null && Hex.IsMatch(colour) && !ReservedHues.Contains(colour, StringComparer.OrdinalIgnoreCase);
+    private static readonly string[] ProjectKeys = { "root", "token", "label", "hide" };
 
     private static AppConfig Load()
     {
@@ -157,7 +145,7 @@ internal static class Config
             // The processor skill first: sent alone it runs the skill, and appended after a hand-typed draft the name,
             // a separate word, counts as leave to run it — only a message starting with it runs it.
             DispatchText = handoffs.Str("dispatchText", "/mastermind-process {path}"),
-            NewDispatchAutoAllow = r.Bool("newDispatchAutoAllow", false),
+            NewSessionAutoAllow = r.Bool("newSessionAutoAllow", false),
             WhatsappEfficiencyFix = r.Bool("whatsappEfficiencyFix", false),
             StartAtLogin = r.Bool("startAtLogin", false),
         };
@@ -295,8 +283,8 @@ internal static class Config
             e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out var n) && IsPort(n, allowZero)
                 ? (true, n) : (false, 0), def);
 
-        /// <summary>The project overrides. An entry with no root is skipped; a bad field in one warns and reads as unset
-        /// — a colour that is not #RRGGBB, or is a reserved hue, included.</summary>
+        /// <summary>The project overrides. An entry with no root is skipped; a bad field in one warns and reads as
+        /// unset.</summary>
         public IReadOnlyList<ProjectEntry> Projects() => Pick<IReadOnlyList<ProjectEntry>>("projects", e =>
         {
             if (e.ValueKind != JsonValueKind.Array) return (false, null);
@@ -322,19 +310,13 @@ internal static class Config
                 _warn.Add($"config · {at}.{k} is not a non-empty string — unset");
                 return null;
             }
-            var colour = S("colour");
-            if (colour != null && !IsChipColour(colour))
-            {
-                _warn.Add($"config · {at}.colour {colour} is not #RRGGBB or is a reserved hue — the palette colour stands");
-                colour = null;
-            }
             bool? hide = null;
             if (e.TryGetProperty("hide", out var h) && h.ValueKind != JsonValueKind.Null)
             {
                 if (h.ValueKind is JsonValueKind.True or JsonValueKind.False) hide = h.GetBoolean();
                 else _warn.Add($"config · {at}.hide is not true or false — unset");
             }
-            return new ProjectEntry { Root = root, Token = S("token"), Label = S("label"), Colour = colour, Hide = hide };
+            return new ProjectEntry { Root = root, Token = S("token"), Label = S("label"), Hide = hide };
         }
     }
 }
