@@ -585,6 +585,21 @@ function check(name, fn) {
       { type: 'result', id: 7, ok: true }
     );
   });
+  check('a call switching to a session never reveals the side bar', () =>
+    assert.ok(!e.executed.some(([id]) => id === 'workbench.action.focusAuxiliaryBar'))
+  );
+  settings['claudeCode.preferredLocation'] = 'sidebar';
+  es.receive({ type: 'call', id: 9, command: 'claude-vscode.editor.open', args: [marker, 'hi', marker, marker, marker, { programmatic: 'honor-preferred-location' }] });
+  await wait(30);
+  check('a new-session call reveals the side bar after editor.open when Claude Code opens sessions there', () => {
+    const at = (cmd) => e.executed.findIndex(([id, sid]) => id === cmd && (cmd !== 'claude-vscode.editor.open' || sid === undefined));
+    assert.ok(at('claude-vscode.editor.open') >= 0 && at('workbench.action.focusAuxiliaryBar') > at('claude-vscode.editor.open'));
+    assert.deepStrictEqual(
+      es.sent.find((m) => m.type === 'result' && m.id === 9),
+      { type: 'result', id: 9, ok: true }
+    );
+  });
+  delete settings['claudeCode.preferredLocation'];
   check('a call naming any other command is refused and never run', () => {
     assert.ok(!e.executed.some(([id]) => id === 'workbench.action.terminal.sendSequence'));
     assert.strictEqual(es.sent.find((m) => m.type === 'result' && m.id === 8).ok, false);
@@ -669,6 +684,16 @@ function check(name, fn) {
       j.executed.find(([id]) => id === 'claude-vscode.editor.open'),
       ['claude-vscode.editor.open', undefined, '/review docs/x.md', undefined, undefined, undefined, { programmatic: 'honor-preferred-location' }]
     )
+  );
+  await wait(30);
+  check("the prompt item leaves the side bar alone under Claude Code's default, an editor tab", () =>
+    assert.ok(!j.executed.some(([id]) => id === 'workbench.action.focusAuxiliaryBar'))
+  );
+  settings['claudeCode.preferredLocation'] = 'sidebar';
+  j.commands['mastermind.promptItem']({ scheme: 'file', fsPath: draft });
+  await wait(30);
+  check('the prompt item reveals the side bar when Claude Code opens sessions there', () =>
+    assert.ok(j.executed.some(([id]) => id === 'workbench.action.focusAuxiliaryBar'))
   );
   check('the explorer menu shows the item only on a file in mastermind.promptFiles', () =>
     assert.strictEqual(PACKAGE.contributes.menus['explorer/context'][0].when, 'resourceScheme == file && resourcePath in mastermind.promptFiles')

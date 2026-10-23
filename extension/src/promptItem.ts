@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { revealNewSession } from './editor';
 import { fileFolders } from './paths';
 
 type PromptItem = { include?: string; exclude?: string; template?: string };
@@ -89,7 +90,7 @@ function open(uri: vscode.Uri | undefined): void {
     vscode.commands
       .executeCommand('claude-vscode.editor.open', undefined, prompt, undefined, undefined, undefined, { programmatic: 'honor-preferred-location' })
       .then(
-        () => undefined,
+        () => revealNewSession(),
         (error: unknown) =>
           vscode.window.setStatusBarMessage(`$(error) Mastermind: the session did not open — ${error instanceof Error ? error.message : String(error)}`, 15000)
       );

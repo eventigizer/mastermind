@@ -14,6 +14,19 @@ export function editorIdentity(context: vscode.ExtensionContext): EditorIdentity
   return { processName: path.parse(process.execPath).name, userDataDir: settingsFolder(context.logUri.fsPath), cli: cliPath(vscode.env.appRoot) };
 }
 
+/** After a new session opens: Cursor 3.x puts it in Claude's side bar view without showing a closed secondary side bar,
+ * where VS Code reopens it — so the side bar is focused open whenever Claude Code opens sessions there (its
+ * preferredLocation `sidebar`; its default, `panel`, opens an editor tab). A failed reveal leaves the session open. */
+export async function revealNewSession(): Promise<void> {
+  if (vscode.workspace.getConfiguration('claudeCode').get('preferredLocation') === 'sidebar') {
+    try {
+      await vscode.commands.executeCommand('workbench.action.focusAuxiliaryBar');
+    } catch {
+      // the session opened; only its reveal failed
+    }
+  }
+}
+
 function settingsFolder(logPath: string): string {
   const parts = logPath.split(path.sep);
   const at = parts.lastIndexOf('logs');

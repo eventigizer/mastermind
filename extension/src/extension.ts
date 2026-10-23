@@ -5,7 +5,7 @@ import { askIfDown, startExe } from './exe';
 import { wireHandoffs } from './handoffs';
 import { Health, healthEnabled } from './health';
 import { wireHooks } from './hooks';
-import { editorIdentity } from './editor';
+import { editorIdentity, revealNewSession } from './editor';
 import { updateIfNewer } from './install';
 import { fileFolders } from './paths';
 import { wireProjects } from './projects';
@@ -77,6 +77,7 @@ async function call(message: Message): Promise<string | undefined> {
   else {
     try {
       await vscode.commands.executeCommand(command, ...args);
+      if (args[0] === undefined) await revealNewSession();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
