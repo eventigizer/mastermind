@@ -17,3 +17,5 @@ jobs:
           allow-no-subscriptions: true
       - name: Print the Marketplace member id
         run: az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id -o tsv
+      - name: Check the app's publish rights on the publisher
+        run: npx --yes @vscode/vsce@4.0.0 verify-pat eventigizer --azure-credential
