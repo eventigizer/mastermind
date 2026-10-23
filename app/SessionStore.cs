@@ -65,10 +65,9 @@ internal sealed class SessionStore
     {
         if (string.IsNullOrEmpty(stop.SessionId)) return;
         _heldStops[stop.SessionId] = stop;
-        const string finishing = "finishing — its Stop hooks still run";
         var card = Events.FirstOrDefault(e => e.SessionId == stop.SessionId && e.Status == AgentStatus.Working);
-        if (card != null) card.Detail = finishing;   // in place, and never into _lastCommand — it is no command
-        else AddEvent(AgentEvent.LocalStatus(stop.SessionId, stop.Cwd, AgentStatus.Working, finishing));
+        if (card != null) card.Detail = AgentEvent.FinishingNote;   // in place, and never into _lastCommand — it is no command
+        else AddEvent(AgentEvent.LocalStatus(stop.SessionId, stop.Cwd, AgentStatus.Working, AgentEvent.FinishingNote));
     }
 
     /// <summary>Drop a session's held Stop — a new prompt, a permission ask, a question or a background wait means its

@@ -1,0 +1,7 @@
+src/**
+smoke.js
+tsconfig.json
+pack.ps1
+node_modules/**
+**/*.map
+media/screens/**

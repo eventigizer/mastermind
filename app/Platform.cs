@@ -77,6 +77,10 @@ internal interface IProcesses
 
     /// <summary>A process's full image path, or null when it cannot be read.</summary>
     string ImagePath(int pid);
+
+    /// <summary>Delete these folders once this process has exited — a running exe's own folder cannot go while it
+    /// runs. Fire and forget: a folder that will not go stays.</summary>
+    void DeleteAfterExit(params string[] folders);
 }
 
 internal interface IEfficiencyMode { Efficiency.Result Release(string image); }

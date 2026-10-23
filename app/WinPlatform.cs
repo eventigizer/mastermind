@@ -382,6 +382,12 @@ internal sealed class WinProcesses : IProcesses
     }
 
     public string ImagePath(int pid) => Proc.ImagePath(pid);
+
+    // A hidden cmd.exe outlives this process: ping is the sleep while it exits, then each folder goes.
+    public void DeleteAfterExit(params string[] folders) =>
+        Process.Start(new ProcessStartInfo("cmd.exe", "/d /s /c \"ping -n 3 127.0.0.1 >nul & "
+            + string.Join(" & ", Array.ConvertAll(folders, f => $"rmdir /s /q \"{f}\"")) + "\"")
+        { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetTempPath() })?.Dispose();
 }
 
 internal sealed class WinEfficiencyMode : IEfficiencyMode

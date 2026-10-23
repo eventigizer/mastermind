@@ -16,6 +16,8 @@ You need the .NET SDK 10 or newer, and Node.js 22 for the extension.
 - **The app** — `dotnet build app/Mastermind.csproj`. `app/run.bat` builds and runs it from source;
   `pwsh -File app/publish.ps1` builds the self-contained app as one folder, `out/app/`, with `Mastermind.exe` in it.
 - **The extension** — in `extension/`: `npm ci`, `npm run build`, then `node smoke.js`, which prints PASS.
+- **The packages** — `pwsh -File extension/pack.ps1` builds the app into `out/pack/app` and writes one `.vsix` per
+  Windows target (x64 and ARM64) into `out/`; `-Install` also installs the x64 one into this machine's VS Code.
 
 ## Layout
 

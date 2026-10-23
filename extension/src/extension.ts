@@ -6,6 +6,7 @@ import { wireHandoffs } from './handoffs';
 import { Health, healthEnabled } from './health';
 import { wireHooks } from './hooks';
 import { editorIdentity } from './editor';
+import { updateIfNewer } from './install';
 import { fileFolders } from './paths';
 import { wireProjects } from './projects';
 import { wirePromptItem } from './promptItem';
@@ -63,6 +64,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   if (context.extensionMode === vscode.ExtensionMode.Development) wireCheckCall(context);
   client.start();
+  void updateIfNewer(context, client);
   void askIfDown(context, client);
 }
 

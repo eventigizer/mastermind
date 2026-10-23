@@ -128,8 +128,17 @@ public sealed class AgentEvent : INotifyPropertyChanged
             _detail = value;
             PropertyChanged?.Invoke(this, new(nameof(Detail)));
             PropertyChanged?.Invoke(this, new(nameof(DetailVisibility)));
+            PropertyChanged?.Invoke(this, new(nameof(DetailIsTool)));
         }
     }
+
+    /// <summary>The held Stop's note (<see cref="SessionStore.HoldStop"/>) — the one prose line a WORKING card's detail
+    /// carries.</summary>
+    public const string FinishingNote = "finishing — its Stop hooks still run";
+
+    // A WORKING card's detail is the agent's tool line — your prompt rides the you block — so the XAML sets it in the
+    // mono face; the held Stop's note, and every other status's detail, stay prose.
+    public bool DetailIsTool => Status == AgentStatus.Working && Detail != FinishingNote;
 
     // YOUR side of the card: the last prompt you sent this session — typed by hand, picked from the panel or a slash
     // command — in its own block above the detail, which keeps only the agent's side (the reply, the live action). Off

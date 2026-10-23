@@ -10,6 +10,8 @@ Usage:
   python make_mastermind_icon.py <out_dir> --preview <png> [--beside <icon.png>]
       also writes a sheet of the tray sizes on a dark and a light taskbar, zoomed so the real pixels show — with
       --beside, another app's icon next to each, as it will sit in the tray
+  python make_mastermind_icon.py <out_dir> --png <png>
+      also writes the store's 128 px icon, drawn on its own grid like every other size
 """
 import argparse
 import math
@@ -85,6 +87,7 @@ def main():
     ap.add_argument("out_dir")
     ap.add_argument("--preview")
     ap.add_argument("--beside")
+    ap.add_argument("--png")
     args = ap.parse_args()
     frames = {s: draw(s) for s in SIZES}
     os.makedirs(args.out_dir, exist_ok=True)
@@ -93,6 +96,8 @@ def main():
     # readers, and a 32-bit DIB is the frame every Windows icon reader takes.
     largest.save(os.path.join(args.out_dir, "mastermind.ico"), sizes=[(s, s) for s in SIZES],
                  append_images=[frames[s] for s in SIZES[:-1]], bitmap_format="bmp")
+    if args.png:
+        draw(128).save(args.png)
     if args.preview:
         preview(args.preview, frames, args.beside)
 

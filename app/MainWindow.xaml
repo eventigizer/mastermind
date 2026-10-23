@@ -4,7 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:local="clr-namespace:Mastermind"
         Title="Mastermind"
-        Width="396" Height="560" MinHeight="220"
+        Width="396" Height="560" MinWidth="396"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="False"
         Background="Transparent" ShowInTaskbar="False" Topmost="True"
         FontFamily="{StaticResource Sans}" UseLayoutRounding="True"
@@ -15,6 +15,7 @@
                         CornerRadius="0" ResizeBorderThickness="0" UseAeroCaptionButtons="False"/>
   </shell:WindowChrome.WindowChrome>
 
+  <Grid>
   <!-- Root surface: semi-opaque so the Win11 acrylic backdrop tints through.
        CornerRadius matches the OS window rounding (~8px) so the dark fill aligns
        with the DWM-rounded window edge — a larger radius leaves an acrylic crescent. -->
@@ -388,7 +389,19 @@
                                  BorderThickness="0" Background="Transparent" Padding="0" Margin="0"
                                  Foreground="{Binding DetailBrush}" FontSize="12.5"
                                  TextWrapping="Wrap" AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"/>
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                          <!-- A WORKING card's tool line in the mono face (AgentEvent.DetailIsTool); the font is never set
+                               locally here, which would outrank the trigger. -->
+                          <TextBox.Style>
+                            <Style TargetType="TextBox">
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding DetailIsTool}" Value="True">
+                                  <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBox.Style>
+                        </TextBox>
                       </Grid>
 
                       <!-- TODO LIST (#3): a compact "<done>/<total> · <current item>" summary; click to expand
@@ -629,7 +642,7 @@
       </Border>
 
       <!-- ============================ FOOTER ============================ -->
-      <Border Grid.Row="3" Padding="16,9,14,12">
+      <Border x:Name="Footer" Grid.Row="3" Padding="16,9,14,12">
         <Grid>
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <Ellipse Width="6" Height="6" Fill="{StaticResource TextMid}" VerticalAlignment="Center"/>
@@ -645,4 +658,29 @@
       </Border>
     </Grid>
   </Border>
+
+  <!-- RESIZE GRIPS: invisible edge and corner thumbs over the surface, normal mode only (UpdateChrome collapses them
+       in fullscreen, whose fill is the work area). ResizeMode stays NoResize: a resizable frameless window takes
+       Windows' snap on a header drag, and the panel parks against a screen edge. The grid has no background, so
+       only the thumbs take the mouse. -->
+  <Grid x:Name="ResizeGrips">
+    <Grid.Resources>
+      <Style TargetType="Thumb">
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="Thumb"><Border Background="Transparent"/></ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+    </Grid.Resources>
+    <Thumb Tag="Left" Width="6" HorizontalAlignment="Left" Margin="0,12" Cursor="SizeWE" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="Right" Width="6" HorizontalAlignment="Right" Margin="0,12" Cursor="SizeWE" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="Top" Height="6" VerticalAlignment="Top" Margin="12,0" Cursor="SizeNS" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="Bottom" Height="6" VerticalAlignment="Bottom" Margin="12,0" Cursor="SizeNS" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="TopLeft" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="SizeNWSE" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="TopRight" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" Cursor="SizeNESW" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="BottomLeft" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" DragDelta="Grip_DragDelta"/>
+    <Thumb Tag="BottomRight" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" DragDelta="Grip_DragDelta"/>
+  </Grid>
+  </Grid>
 </Window>

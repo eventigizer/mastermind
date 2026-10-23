@@ -3,14 +3,15 @@ using System.Runtime.CompilerServices;
 namespace Mastermind;
 
 /// <summary>The entry point ahead of WPF: <c>--hook</c> answers one hook entry and exits (<see cref="HookRun"/>) —
-/// before any window code loads or the single-instance lock is asked, so it costs only the process start; any other
-/// start is the app.</summary>
+/// before any window code loads or the single-instance lock is asked, so it costs only the process start;
+/// <c>--uninstall</c> takes out what an install wrote (<see cref="Uninstall"/>); any other start is the app.</summary>
 internal static class Program
 {
     [STAThread]
     private static int Main(string[] args)
     {
         if (args.Length == 1 && args[0] == "--hook") return HookRun.Run();
+        if (args.Length == 1 && args[0] == "--uninstall") return Uninstall.Run();
         RunApp();
         return 0;
     }

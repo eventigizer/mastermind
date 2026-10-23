@@ -96,6 +96,25 @@ internal static class HookEntries
         return lines;
     }
 
+    /// <summary>The uninstall's sweep (<see cref="Uninstall"/>): every Mastermind entry out of each watched project the
+    /// manifest does not list, and the watch forgotten — the strip a stop-watching writes, with no proposal to confirm.
+    /// Nothing when the manifest cannot be read, since a listed project would then look unlisted.</summary>
+    public static void StripWatched()
+    {
+        var (manifest, failed) = ProjectList.ReadManifest();
+        if (failed) return;
+        foreach (var root in Watched())
+        {
+            if (!Directory.Exists(root) || IsListed(manifest, root)) continue;
+            var (before, data, error) = Read(ClaudePaths.SettingsLocal(root));
+            if (error != null) continue;
+            var original = data.DeepClone();
+            Rewrite(data, null);
+            if (!JsonNode.DeepEquals(original, data)) Json.WriteAtomic(ClaudePaths.SettingsLocal(root), Text(data, before));
+            SetWatched(root, false);
+        }
+    }
+
     /// <summary>The file's text ("" when missing) and its object; an error text instead when it cannot be read or is
     /// not an object whose hooks, when present, is an object.</summary>
     private static (string Text, JsonObject Data, string Error) Read(string path)

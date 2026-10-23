@@ -22,8 +22,11 @@ internal static class HealthReader
     internal const long CageMb = 4192;
 
     // Each editor exe's default V8 heap, measured once a run: V8 sizes it off the machine's memory — 4192 MB at 16 GB of
-    // RAM and up, about half below — so no one number holds on every PC.
-    private static readonly ConcurrentDictionary<string, (long Mb, string Error)> Defaults = new(StringComparer.OrdinalIgnoreCase);
+    // RAM and up, about half below — so no one number holds on every PC. A failed measurement is held a minute, then
+    // taken again: a probe that timed out on a busy machine would otherwise sit on the item until the next run, and the
+    // hold keeps every window on one exe from waiting out the probe's bound on each tick.
+    private static readonly ConcurrentDictionary<string, (long Mb, string Error, long At)> Defaults = new(StringComparer.OrdinalIgnoreCase);
+    private const long RetryMs = 60000;
 
     /// <summary>A window's servers; busy, with why, unless every Claude session of the window reads idle (<see
     /// cref="BusyWhy(int, IReadOnlySet{string})"/>); the Claude panel's ceiling, its exe's default heap; the first child
@@ -94,17 +97,20 @@ internal static class HealthReader
 
     /// <summary>The default V8 heap of the exe a window's host runs on — what VS Code's own Node gives a server with no
     /// flag, and the nearest measure of a Claude panel renderer's cap, which Chromium sizes off the machine's memory
-    /// too. Measured once a run per exe; a failure keeps <see cref="CageMb"/> with why, which the window's item shows.</summary>
+    /// too. Measured once a run per exe; a failure keeps <see cref="CageMb"/> with why, which the window's item shows, and
+    /// is measured again <see cref="RetryMs"/> on.</summary>
     private static (long Mb, string Error) DefaultHeapOf(int host)
     {
         string exe = Platform.Processes.ImagePath(host);
-        return exe == null
-            ? (CageMb, "VS Code's heap cap could not be measured (its exe path is unreadable) — 4.1 GB assumed")
-            : Defaults.GetOrAdd(exe, Measure);
+        var (mb, error, _) = exe == null
+            ? (CageMb, "VS Code's heap cap could not be measured (its exe path is unreadable) — 4.1 GB assumed", 0L)
+            : Defaults.AddOrUpdate(exe, Measure,
+                                   (key, was) => was.Error != null && Environment.TickCount64 - was.At >= RetryMs ? Measure(key) : was);
+        return (mb, error);
     }
 
-    /// <summary>The exe run as Node (ELECTRON_RUN_AS_NODE) to print its heap_size_limit in MB.</summary>
-    private static (long Mb, string Error) Measure(string exe)
+    /// <summary>The exe run as Node (ELECTRON_RUN_AS_NODE) to print its heap_size_limit in MB, stamped with when.</summary>
+    private static (long Mb, string Error, long At) Measure(string exe)
     {
         (long Mb, string Error) result;
         try
@@ -126,7 +132,7 @@ internal static class HealthReader
             result = (mb, null);
         }
         catch (Exception ex) { result = (CageMb, $"VS Code's heap cap could not be measured ({ex.Message}) — 4.1 GB assumed"); }
-        return result;
+        return (result.Mb, result.Error, Environment.TickCount64);
     }
 
     /// <summary>Why one host's Claude sessions are not all idle, or null when they are — a fresh read for the shell's
@@ -271,19 +277,22 @@ internal static class HealthReader
 
     /// <summary>A probed panel's window, 0 for none: its session's own <c>claude.exe</c>, under that window's host, off
     /// the server read's map; nothing for a session running anywhere else (a window outside health, a terminal);
-    /// else — no session id, or none running — the one window whose folders hold its cwd, nothing when none or several
-    /// do.</summary>
+    /// else — no session id, or none running — the window whose folder holding its cwd is the deepest, nothing when none
+    /// does or two hold it at that depth.</summary>
     private static int HostOf(CdpSwitcher.Probe p, ServerRead servers, IReadOnlyDictionary<int, IReadOnlyList<string>> hostFolders)
     {
         int host = 0;
         if (!string.IsNullOrEmpty(p.Sid) && servers.HostBySession.TryGetValue(p.Sid, out var bySession)) host = bySession;
         else if (string.IsNullOrEmpty(p.Sid) || !servers.LiveIds.Contains(p.Sid))
         {
+            // A window opened inside another window's folder is the nearer match, so its folder wins there; each holding
+            // root is a prefix of the cwd's key, so the longer one is the deeper.
             var key = Paths.Key(p.Cwd);
             var holding = key.Length == 0
-                ? new List<int>()
-                : hostFolders.Where(h => h.Value.Any(f => Paths.Within(key, Paths.Key(f)))).Select(h => h.Key).ToList();
-            if (holding.Count == 1) host = holding[0];
+                ? new List<(int Host, int Depth)>()
+                : hostFolders.Select(h => (Host: h.Key, Depth: h.Value.Select(Paths.Key).Where(f => Paths.Within(key, f)).Select(f => f.Length).DefaultIfEmpty(-1).Max()))
+                             .Where(h => h.Depth >= 0).OrderByDescending(h => h.Depth).ToList();
+            if (holding.Count == 1 || (holding.Count > 1 && holding[0].Depth > holding[1].Depth)) host = holding[0].Host;
         }
         return host;
     }

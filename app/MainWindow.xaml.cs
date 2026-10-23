@@ -76,6 +76,21 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => ScheduleSave();
         SizeChanged += (_, _) => ScheduleSave();
 
+        // The panel's floor, once laid out: its fixed rows — the band under the list counted at its full height whether
+        // the big count or the log shows, since both can start hidden — and one whole card in the list, which keeps the
+        // design height in normal mode. A window shorter than that grows upward, so one parked in a corner keeps its
+        // bottom edge on the screen.
+        Loaded += (_, _) =>
+        {
+            MinHeight = TitleBar.ActualHeight + ListScroller.Padding.Top + CardDesignHeight + CardGap + ListScroller.Padding.Bottom
+                        + Math.Max(BigCount.Height, LogPanel.Height) + Footer.ActualHeight;
+            if (!_full && Height < MinHeight)
+            {
+                Top -= MinHeight - Height;
+                Height = MinHeight;
+            }
+        };
+
         UpdateChrome();
     }
 
@@ -315,7 +330,32 @@ public partial class MainWindow : Window
     }
 
     // ---- chrome / buttons --------------------------------------------------
-    private void UpdateChrome() => PinButton.Content = Topmost ? "Unpin" : "Pin on top";
+    private void UpdateChrome()
+    {
+        PinButton.Content = Topmost ? "Unpin" : "Pin on top";
+        ResizeGrips.Visibility = _full ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>An edge or corner thumb's drag (MainWindow.xaml RESIZE GRIPS): a left or top edge moves the window as
+    /// it resizes, so the opposite edge stays put; never below MinWidth / MinHeight. SizeChanged saves the placement.</summary>
+    private void Grip_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        string edge = (string)((FrameworkElement)sender).Tag;
+        if (edge.Contains("Left"))
+        {
+            double w = Math.Max(MinWidth, Width - e.HorizontalChange);
+            Left += Width - w;
+            Width = w;
+        }
+        else if (edge.Contains("Right")) Width = Math.Max(MinWidth, Width + e.HorizontalChange);
+        if (edge.Contains("Top"))
+        {
+            double h = Math.Max(MinHeight, Height - e.VerticalChange);
+            Top += Height - h;
+            Height = h;
+        }
+        else if (edge.Contains("Bottom")) Height = Math.Max(MinHeight, Height + e.VerticalChange);
+    }
 
     // Fullscreen is pinned to its monitor's work area: a header drag there only knocks the dashboard off its fill
     // (a stray hand on the mouse), and the way back was exit + re-enter fullscreen.

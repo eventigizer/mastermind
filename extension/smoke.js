@@ -1,8 +1,8 @@
-// Smoke test for the Mastermind shell — run after every build, before install.ps1:
+// Smoke test for the Mastermind shell — run after every build; pack.ps1 runs it before it packages:
 //   cd extension && npm run build && node smoke.js
 // Loads out/extension.js against a stub vscode module, a fake exe (fetch + WebSocket) and a fake spawn — no Mastermind,
 // no VS Code, no process — one window per state. Fixtures go under the repo's tmp folder, LOCALAPPDATA pointed there;
-// install.ps1 packages only the manifest, out/, media/ and the README.
+// .vscodeignore keeps this file out of the package.
 'use strict';
 const assert = require('assert');
 const Module = require('module');
@@ -14,13 +14,17 @@ const REPO = path.resolve(__dirname, '..');
 const FIXTURES = path.join(REPO, 'tmp', 'smoke-mastermind-vscode');
 const OUT = path.join(__dirname, 'out');
 const PACKAGE = require('./package.json');
-const PROPS = PACKAGE.contributes.configuration.properties;
+const PROPS = Object.assign({}, ...PACKAGE.contributes.configuration.map((s) => s.properties));
 process.env.LOCALAPPDATA = path.join(FIXTURES, 'LocalAppData');
 delete process.env.CLAUDE_CONFIG_DIR; // each check sets it when it needs it
 const APP_DIR = path.join(process.env.LOCALAPPDATA, 'Mastermind');
 const CONFIG = path.join(APP_DIR, 'config.json');
 const LOCK = path.join(APP_DIR, 'ask.lock');
 const EXE = path.join(FIXTURES, 'Mastermind.exe');
+// The package a window's extension runs from: one carrying no build (a development host), and one carrying bin/app.
+const NO_BUNDLE = path.join(FIXTURES, 'ext-dev');
+const BUNDLE = path.join(FIXTURES, 'ext');
+const INSTALLED = path.join(APP_DIR, 'app');
 // A fake editor install and settings folder: the hello's editor identity is read off them.
 const APP_ROOT = path.join(FIXTURES, 'Editor', '0123456789', 'resources', 'app'); // VS Code's per-build folder
 const EDITOR_CLI = path.join(FIXTURES, 'Editor', 'bin', 'code.cmd');
@@ -48,8 +52,9 @@ const realNow = Date.now;
 Date.now = () => realNow() + offset;
 const wait = (ms) => new Promise((resolve) => realSetTimeout(resolve, ms));
 
-// The exe, faked: the ports that answer, every socket opened and what each received.
-const exe = { ports: new Set(), sockets: [], cdpTargets: [] };
+// The exe, faked: the ports that answer, every socket opened and what each received. With its lifecycle on, a quit
+// stops it and a spawned Mastermind.exe answers; quits records whether each arrived over an open channel.
+const exe = { ports: new Set(), sockets: [], cdpTargets: [], lifecycle: false, quits: [] };
 Object.defineProperty(globalThis, 'fetch', {
   configurable: true,
   writable: true,
@@ -78,7 +83,13 @@ class FakeSocket {
     }, 5);
   }
   send(text) {
-    this.sent.push(JSON.parse(text));
+    const m = JSON.parse(text);
+    this.sent.push(m);
+    if (m.type === 'quit' && exe.lifecycle) {
+      exe.quits.push({ open: this.readyState === 1 });
+      exe.ports.delete(this.port);
+      realSetTimeout(() => this.close(), 5);
+    }
   }
   close() {
     if (this.readyState !== 3) {
@@ -109,6 +120,7 @@ childProcess.spawn = (file, args, options) => {
     },
   };
   spawned.push(child);
+  if (exe.lifecycle && path.basename(file) === 'Mastermind.exe') exe.ports.add(7778);
   return child;
 };
 
@@ -294,6 +306,7 @@ function openWindow(options = {}) {
   const context = {
     subscriptions: [],
     extensionMode: 1,
+    extensionPath: options.extensionPath || NO_BUNDLE,
     logUri: { scheme: 'file', fsPath: path.join(USER_DATA, 'logs', '20261021T000000', 'window1', 'exthost', `${PACKAGE.publisher}.${PACKAGE.name}`) },
     extension: { id: `${PACKAGE.publisher}.${PACKAGE.name}`, packageJSON: PACKAGE },
     globalState: {
@@ -316,6 +329,8 @@ function reset({ config, lock, ports } = {}) {
   globalState = new Map();
   exe.ports = new Set(ports || []);
   exe.cdpTargets = [];
+  exe.lifecycle = false;
+  exe.quits = [];
   spawned.length = 0;
   fs.rmSync(LOCK, { force: true });
   fs.rmSync(CONFIG, { force: true });
@@ -792,6 +807,103 @@ function check(name, fn) {
   });
   offset = 0;
   l.close();
+
+  // M — the bundled copy: a package carrying bin/app installs it into the app folder at Start, swaps a newer one in at
+  // activation, and leaves the app folder alone under exePath. The fake exe's lifecycle is on throughout.
+  const APP_EXE = path.join(INSTALLED, 'Mastermind.exe');
+  const build = (dir, version) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Mastermind.exe'), '');
+    fs.writeFileSync(path.join(dir, 'version.txt'), version);
+  };
+  const versionIn = (dir) => fs.readFileSync(path.join(dir, 'version.txt'), 'utf8').trim();
+  const bundled = (bundle, installed) => {
+    reset({ config: JSON.stringify({ hookPort: 7778 }) });
+    for (const dir of [BUNDLE, INSTALLED, `${INSTALLED}.new`, `${INSTALLED}.old`]) fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(path.join(APP_DIR, 'update.lock'), { force: true });
+    build(path.join(BUNDLE, 'bin', 'app'), bundle);
+    if (installed) build(INSTALLED, installed);
+    exe.lifecycle = true;
+  };
+  // The install's waits run on the wall clock, so a check waits on the outcome, never a fixed delay.
+  const settle = async (test, ms = 5000) => {
+    const end = realNow() + ms;
+    while (!test() && realNow() < end) await wait(20);
+  };
+
+  bundled('1.0.1', null);
+  const m1 = openWindow({ extensionPath: BUNDLE, folders: [proj], answers: { 'start it?': 'Start', 'log in?': 'No' } });
+  await m1.activation;
+  await settle(() => spawned.length > 0);
+  check('bundled, nothing installed: Start copies bin/app into the app folder and spawns its Mastermind.exe', () => {
+    assert.strictEqual(versionIn(INSTALLED), '1.0.1');
+    assert.strictEqual(spawned.length, 1);
+    assert.strictEqual(spawned[0].file, APP_EXE);
+    assert.deepStrictEqual(spawned[0].args, []);
+  });
+  m1.close();
+
+  bundled('1.0.1', '1.0.0');
+  exe.ports.add(7778);
+  const m2 = openWindow({ extensionPath: BUNDLE, folders: [proj] });
+  await m2.activation;
+  await settle(() => !fs.existsSync(`${INSTALLED}.old`) && m2.asked.some((t) => t.includes('updated to')));
+  check('bundled newer, Mastermind running: the quit goes over the open channel, the swap lands, the new build starts in the background', () => {
+    assert.deepStrictEqual(exe.quits, [{ open: true }]);
+    assert.strictEqual(versionIn(INSTALLED), '1.0.1');
+    assert.strictEqual(spawned.length, 1);
+    assert.strictEqual(spawned[0].file, APP_EXE);
+    assert.deepStrictEqual(spawned[0].args, ['--background']);
+    assert.ok(!fs.existsSync(`${INSTALLED}.old`));
+    assert.ok(m2.asked.includes('Mastermind updated to 1.0.1'));
+  });
+  m2.close();
+
+  bundled('1.0.1', '1.0.0');
+  settings['mastermind.exePath'] = EXE;
+  const m3 = openWindow({ extensionPath: BUNDLE, folders: [proj], answers: { 'start it?': 'Start', 'log in?': 'No' } });
+  await m3.activation;
+  await settle(() => spawned.length > 0);
+  await wait(100); // an update running anyway would have swapped by now
+  check('exePath set: neither the install nor the update touches the app folder, and Start spawns the set path', () => {
+    assert.strictEqual(spawned.length, 1);
+    assert.strictEqual(spawned[0].file, EXE);
+    assert.strictEqual(versionIn(INSTALLED), '1.0.0');
+    assert.ok(!fs.existsSync(`${INSTALLED}.new`) && !fs.existsSync(`${INSTALLED}.old`));
+    assert.ok(!m3.asked.some((t) => t.includes('updated to')));
+  });
+  m3.close();
+  bundled('1.0.1', null);
+  const missing = path.join(FIXTURES, 'missing', 'Mastermind.exe');
+  settings['mastermind.exePath'] = missing;
+  const m3b = openWindow({ extensionPath: BUNDLE, folders: [proj], answers: { 'start it?': 'Start', 'log in?': 'No' } });
+  await m3b.activation;
+  await settle(() => m3b.asked.some((t) => t.includes('no Mastermind.exe at')));
+  check("exePath set to a missing file: Start's error names that path, and nothing is installed or spawned", () => {
+    assert.ok(m3b.asked.some((t) => t.includes(`no Mastermind.exe at "${missing}"`)));
+    assert.strictEqual(spawned.length, 0);
+    assert.ok(!fs.existsSync(INSTALLED));
+  });
+  m3b.close();
+
+  bundled('1.0.1', '1.0.0');
+  const m4 = openWindow({ extensionPath: BUNDLE, folders: [proj], answers: { 'start it?': 'Not now', 'log in?': 'No' } });
+  await m4.activation;
+  await settle(() => m4.asked.some((t) => t.includes('updated to')));
+  check('bundled newer, nothing running: the update swaps with no spawn and keeps app.old', () => {
+    assert.strictEqual(versionIn(INSTALLED), '1.0.1');
+    assert.strictEqual(spawned.length, 0);
+    assert.strictEqual(versionIn(`${INSTALLED}.old`), '1.0.0');
+  });
+  await m4.commands['mastermind.start']();
+  await settle(() => !fs.existsSync(`${INSTALLED}.old`));
+  check("the next Start spawns the app folder's Mastermind.exe, and once it answers app.old is gone", () => {
+    assert.strictEqual(spawned.length, 1);
+    assert.strictEqual(spawned[0].file, APP_EXE);
+    assert.ok(!fs.existsSync(`${INSTALLED}.old`));
+  });
+  m4.close();
+  exe.lifecycle = false;
 
   checks.forEach((line) => console.log(line));
   const failed = checks.filter((line) => line.startsWith('FAIL')).length;
