@@ -37,6 +37,8 @@ public partial class App : System.Windows.Application
     private bool PanelStaysHidden => _background;
     private readonly HashSet<string> _hiddenLogged = new(StringComparer.OrdinalIgnoreCase);   // projects whose hide was logged this run
     private readonly HookSymptom _symptom = new();   // the hooks-aren't-arriving warning
+    private readonly WindowCheck _windowCheck = new();   // the open-window self-check
+    private string _openSeen;                        // the open-window line last logged
     private string _driftSeen;                        // the hook check's last findings — logged only on a change
     // A tool ping this soon after the turn's Stop is that turn's last one arriving late — every event rides its own curl.
     private static readonly TimeSpan LateTool = TimeSpan.FromSeconds(3);
@@ -180,6 +182,7 @@ public partial class App : System.Windows.Application
         {
             CheckHooks();
             WarnSilentSessions();
+            CheckOpenWindows();
             _clients.RefreshHealth();
             _clients.RefreshWatched();
             _restore.Track(_clients.Windows());
@@ -219,6 +222,23 @@ public partial class App : System.Windows.Application
         foreach (var project in _symptom.Silent(LiveSessions.Snapshot, IsWatched, DateTime.Now))
             _log.Add(LogKind.Warn, $"hooks aren't arriving from {project} — a policy blocking them, a wrong port or an "
                                    + "engine too old for them");
+    }
+
+    /// <summary>The set the IDE locks read as open, logged when it changes, and the self-check against the windows
+    /// connected over /client (<see cref="WindowCheck"/>).</summary>
+    private void CheckOpenWindows()
+    {
+        var open = VsCode.OpenProjectKeys();
+        var seen = string.Join(", ", open.Select(Paths.Leaf).OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        if (seen != _openSeen)
+        {
+            _openSeen = seen;
+            _log.Add(LogKind.Info, "open windows · " + (seen.Length > 0 ? seen : "none"));
+        }
+        var connected = _clients.Windows().SelectMany(w => w.Folders);
+        foreach (var project in _windowCheck.Blind(connected, open, LiveSessions.Snapshot.Values.Select(s => s.Cwd), DateTime.Now))
+            _log.Add(LogKind.Warn, $"window check · {project} is connected with a session but its IDE lock reads closed — "
+                                   + "its handoffs stay parked");
     }
 
     /// <summary>True when a cwd sits in a project the last hook check found fully wired — a project without Mastermind's
