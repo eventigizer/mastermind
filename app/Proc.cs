@@ -103,6 +103,13 @@ internal static class Proc
         finally { Native.CloseHandle(h); }
     }
 
+    /// <summary>When a running process started, in UTC, or null when it is not running or cannot be read.</summary>
+    public static DateTime? StartedAt(int pid)
+    {
+        try { using var p = Process.GetProcessById(pid); return p.StartTime.ToUniversalTime(); }
+        catch { return null; }   // gone, or another account's
+    }
+
     /// <summary>Outcome of a reap attempt — lets the caller log WHY a target wasn't killed (a hard-to-explain
     /// "reaped 0" otherwise). AccessDenied is the elevated-VS-Code case.</summary>
     public enum KillResult { Killed, Gone, AccessDenied, NotClaude }
@@ -139,4 +146,18 @@ internal static class Proc
         }
         catch { return KillResult.Gone; }                       // exited between get and kill
     }
+}
+
+/// <summary>The real parent links of one <see cref="Proc.Table"/> snapshot. The snapshot keeps a dead parent's pid, so a
+/// process started before the one now holding that pid is no child of it — followed, a session's shell holding the
+/// editor's dead parent's pid leads a walk from one window's host into every other window's, and a WhatsApp process
+/// holding the desktop shell's takes the whole desktop into its tree. Each start time is read once; one that cannot
+/// be read keeps its link.</summary>
+internal sealed class ParentLinks
+{
+    private readonly Dictionary<int, DateTime?> _started = new();
+
+    public bool IsReal(int child, int parent) => !(Started(child) < Started(parent));
+
+    private DateTime? Started(int pid) => _started.TryGetValue(pid, out var at) ? at : (_started[pid] = Proc.StartedAt(pid));
 }

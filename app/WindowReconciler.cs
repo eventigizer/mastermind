@@ -59,6 +59,10 @@ internal sealed class WindowReconciler
     public bool Degraded { get; private set; }
     public event Action DegradedChanged;
 
+    /// <summary>The open-window keys the last poll read — the open-window check reuses them rather than probe the locks
+    /// a second time on the UI thread.</summary>
+    public IReadOnlySet<string> OpenKeys => _lastOpenKeys;
+
     /// <summary>Cards a tick corrected off the registry's busy / idle state, each with the raw event name that
     /// restores its status — the view persists (StatusCache) and logs them; this class touches no disk.</summary>
     public event Action<List<(AgentEvent Fresh, string RawEvent)>> RunStateCorrected;

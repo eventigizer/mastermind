@@ -61,13 +61,13 @@ internal interface IProcesses
     /// Throws when the snapshot fails.</summary>
     IReadOnlyList<ChildProcess> ChildrenOf(IReadOnlyCollection<int> parents);
 
-    /// <summary>Every process with this image name anywhere under these pids, off one snapshot — its pid, the root it sits
-    /// under and its command line ("" when unreadable) — so a wrapper process between them hides none; one gone
-    /// mid-read is left out. Throws when the snapshot fails.</summary>
+    /// <summary>Every process with this image name anywhere under these pids, off one snapshot — its pid, the nearest root
+    /// it sits under and its command line ("" when unreadable) — so a wrapper process between them hides none; each
+    /// comes once, one gone mid-read is left out. Throws when the snapshot fails.</summary>
     IReadOnlyList<(int Pid, int Root, string CommandLine)> DescendantsNamed(IReadOnlyCollection<int> roots, string exe);
 
     /// <summary>The first process with this image name on each branch under these pids, off one snapshot — its pid and
-    /// the root it sits under. One nested under another of the same name (a <c>claude -p</c> a session's shell runs)
+    /// the nearest root it sits under. One nested under another of the same name (a <c>claude -p</c> a session's shell runs)
     /// is left out; a wrapper of another name between them is walked through. Null when the snapshot holds none of
     /// the roots — every one gone; throws when the snapshot fails.</summary>
     IReadOnlyList<(int Pid, int Root)> OutermostNamed(IReadOnlyCollection<int> roots, string exe);

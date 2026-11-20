@@ -53,7 +53,7 @@ internal static class Efficiency
     }
 
     /// <summary>Pids of every <paramref name="rootImage"/> process and its descendants, from one Toolhelp snapshot
-    /// (<see cref="Proc.Table"/>); empty on any failure.</summary>
+    /// (<see cref="Proc.Table"/>) along its real parent links (<see cref="ParentLinks"/>); empty on any failure.</summary>
     private static List<int> Tree(string rootImage)
     {
         List<(int Pid, int Parent, string Exe)> procs;
@@ -61,11 +61,12 @@ internal static class Efficiency
         catch (InvalidOperationException ex) { Diag.Warn("efficiency tree", ex); return new List<int>(); }
         var set = new HashSet<int>(procs.Where(p => string.Equals(p.Exe, rootImage, StringComparison.OrdinalIgnoreCase))
                                         .Select(p => p.Pid));
+        var links = new ParentLinks();
         for (bool added = set.Count > 0; added; )
         {
             added = false;
             foreach (var p in procs)
-                if (!set.Contains(p.Pid) && set.Contains(p.Parent)) { set.Add(p.Pid); added = true; }
+                if (!set.Contains(p.Pid) && set.Contains(p.Parent) && links.IsReal(p.Pid, p.Parent)) { set.Add(p.Pid); added = true; }
         }
         return set.ToList();
     }

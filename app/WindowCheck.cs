@@ -1,32 +1,53 @@
 namespace Mastermind;
 
 /// <summary>
-/// The open-window self-check: a window connected over /client with a live session in its folder, whose folder the
-/// IDE locks read as closed for a minute, means the lock reading has gone blind — every handoff to it sits PARKED and
-/// nothing else says why. The session in the folder proves the Claude extension runs there, so a window that never
-/// started it writes no lock and is not judged. Warned once per folder until it clears. UI thread.
+/// The open-window check: the folders the IDE locks read open, logged whenever that set changes, and a warning once per
+/// spell when a window connected over <c>/client</c> with a live session in its folder has read closed for a minute —
+/// the lock reading decides READY against PARKED, and nothing else reports it going blind. A window with no live session
+/// is never judged: one that never started the extension writes no lock. UI thread.
 /// </summary>
 internal sealed class WindowCheck
 {
     private static readonly TimeSpan Grace = TimeSpan.FromMinutes(1);
-    private readonly Dictionary<string, DateTime> _missingSince = new(StringComparer.Ordinal);
+    private string _openSeen;   // the last open set logged
+    private readonly Dictionary<string, DateTime> _closedSince = new(StringComparer.Ordinal);   // folder key → first closed read
     private readonly HashSet<string> _warned = new(StringComparer.Ordinal);
 
-    /// <summary>The name of each folder newly judged blind.</summary>
-    public List<string> Blind(IEnumerable<string> connectedFolders, HashSet<string> openKeys, IEnumerable<string> sessionCwds,
-        DateTime now)
+    /// <summary>The <c>open windows · …</c> line when the open set differs from the last one logged, else null.</summary>
+    public string OpenChanged(IReadOnlySet<string> openKeys)
     {
-        var cwds = sessionCwds.Select(Paths.Key).ToList();
-        var missing = connectedFolders.Select(Paths.Key).Distinct()
-            .Where(f => !openKeys.Contains(f) && cwds.Any(c => Paths.Within(c, f))).ToHashSet(StringComparer.Ordinal);
+        var leaves = openKeys.Select(Paths.Leaf).OrderBy(l => l, StringComparer.Ordinal).ToList();
+        var seen = string.Join(", ", leaves);
+        if (seen == _openSeen) return null;
+        _openSeen = seen;
+        return "open windows · " + (leaves.Count == 0 ? "none" : seen);
+    }
 
-        foreach (var f in _missingSince.Keys.Where(f => !missing.Contains(f)).ToList()) { _missingSince.Remove(f); _warned.Remove(f); }
-
+    /// <summary>Each connected folder newly judged blind — closed to the locks for <see cref="Grace"/> with a live
+    /// session inside it. A folder reading open again, or no longer connected, starts its next spell from zero.</summary>
+    public List<string> Blind(IEnumerable<string> connectedFolders, IReadOnlySet<string> openKeys,
+        IEnumerable<string> liveCwds, DateTime now)
+    {
+        var live = liveCwds.Where(c => !string.IsNullOrEmpty(c)).Select(Paths.Key).ToList();
+        var connected = new HashSet<string>(StringComparer.Ordinal);
         var blind = new List<string>();
-        foreach (var f in missing)
+        foreach (var folder in connectedFolders)
         {
-            if (!_missingSince.TryGetValue(f, out var since)) { _missingSince[f] = now; continue; }
-            if (now - since >= Grace && _warned.Add(f)) blind.Add(Paths.Leaf(f));
+            var key = Paths.Key(folder);
+            if (string.IsNullOrEmpty(key) || !connected.Add(key)) continue;
+            if (openKeys.Contains(key) || !live.Any(c => Paths.Within(c, key)))
+            {
+                _closedSince.Remove(key);
+                _warned.Remove(key);
+                continue;
+            }
+            if (!_closedSince.TryGetValue(key, out var since)) { _closedSince[key] = now; continue; }
+            if (now - since >= Grace && _warned.Add(key)) blind.Add(folder);
+        }
+        foreach (var gone in _closedSince.Keys.Where(k => !connected.Contains(k)).ToList())
+        {
+            _closedSince.Remove(gone);
+            _warned.Remove(gone);
         }
         return blind;
     }

@@ -5,8 +5,8 @@ namespace Mastermind;
 /// <summary>
 /// "Use handoffs in this project" and its undo — the two skills Mastermind writes into a project's
 /// <c>.claude/skills/</c>: <c>mastermind-handoff</c>, the writer, and <c>mastermind-process</c>, the processor. Plain
-/// project skills, never a skills-directory plugin: a project plugin loads only where ~/.claude.json trusts the exact
-/// key of its git root, which the VS Code extension never writes, while plain project skills load in every session.
+/// project skills, never a skills-directory plugin: a project plugin loads only from the session's own folder, on the
+/// exact trust key of its git root, while plain project skills load from every folder up to the repository root.
 /// Their text is embedded in the exe (<c>skills/</c>), the writer's address book filled
 /// in at each write, each folder beside a <c>.gitignore</c> of <c>*</c> so this machine's project names never reach
 /// git. The install also makes the handoff folders and <c>.mastermind/.gitignore</c> (staging only, so pending work is
@@ -77,6 +77,7 @@ internal static class HandoffSkills
         {
             watched ? "Sessions already open there see /mastermind-handoff and /mastermind-process at once."
                     : "Sessions already open there see /mastermind-handoff and /mastermind-process after /reload-skills, or once restarted.",
+            "In a project Claude Code in VS Code hasn't trusted yet, sessions see them only after Trust folder and a new session.",
             "The mastermind-handoff and mastermind-process folders in .claude/skills are Mastermind's: it rewrites them at each start.",
         };
         return new Outcome(null, false, notes, keys);

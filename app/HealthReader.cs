@@ -144,8 +144,8 @@ internal static class HealthReader
     // session, so no registry row (extension v2.1.301).
     private const string ChromeHelperFlag = "--claude-in-chrome-mcp";
 
-    /// <summary>Every Claude session process anywhere under these hosts, pid → host. The extension's Chrome helper is
-    /// left out; any other <c>claude.exe</c> stays in, so one with no registry row still reads busy.</summary>
+    /// <summary>Every Claude session process anywhere under these hosts, pid → the nearest host above it. The extension's
+    /// Chrome helper is left out; any other <c>claude.exe</c> stays in, so one with no registry row still reads busy.</summary>
     private static Dictionary<int, int> SessionProcesses(IReadOnlyCollection<int> hosts) =>
         Platform.Processes.DescendantsNamed(hosts, "claude.exe")
             .Where(p => !p.CommandLine.Contains(ChromeHelperFlag, StringComparison.Ordinal))

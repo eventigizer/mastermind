@@ -325,9 +325,10 @@ internal sealed class WinProcesses : IProcesses
     public IReadOnlyList<ChildProcess> ChildrenOf(IReadOnlyCollection<int> parents)
     {
         var wanted = new HashSet<int>(parents);
+        var links = new ParentLinks();
         var list = new List<ChildProcess>();
         foreach (var p in Proc.Table())
-            if (wanted.Contains(p.Parent))
+            if (wanted.Contains(p.Parent) && links.IsReal(p.Pid, p.Parent))
             {
                 var (gone, cmd, bytes, error) = Proc.Inspect(p.Pid);
                 if (!gone) list.Add(new ChildProcess(p.Pid, p.Parent, p.Exe, cmd, bytes, error));
@@ -353,33 +354,35 @@ internal sealed class WinProcesses : IProcesses
         return Named(table, roots, exe, pastMatch: false).ToList();
     }
 
-    /// <summary>Each process with this image name under the roots, breadth-first off one snapshot, with the root it sits
-    /// under; the walk goes on below a match only when <paramref name="pastMatch"/>.</summary>
+    /// <summary>Each process with this image name under the roots, breadth-first off one snapshot along its real parent
+    /// links (<see cref="ParentLinks"/>), each once, with the nearest root it sits under; the walk goes on below a
+    /// match only when <paramref name="pastMatch"/>.</summary>
     private static IEnumerable<(int Pid, int Root)> Named(List<(int Pid, int Parent, string Exe)> table,
                                                           IReadOnlyCollection<int> roots, string exe, bool pastMatch)
     {
         var byParent = table.ToLookup(p => p.Parent);
+        var links = new ParentLinks();
+        // One seen-set holding every root: a link kept on an unreadable start time can loop, or lead one root's walk
+        // into another root's tree and return its processes twice.
+        var seen = new HashSet<int>(roots);
         foreach (int root in roots)
         {
-            // Seen-set: a reused pid can make the parent links loop.
-            var seen = new HashSet<int> { root };
             var queue = new Queue<int>(new[] { root });
             while (queue.Count > 0)
-                foreach (var c in byParent[queue.Dequeue()])
-                    if (seen.Add(c.Pid))
+            {
+                int parent = queue.Dequeue();
+                foreach (var c in byParent[parent])
+                    if (links.IsReal(c.Pid, parent) && seen.Add(c.Pid))
                     {
                         bool match = string.Equals(c.Exe, exe, StringComparison.OrdinalIgnoreCase);
                         if (match) yield return (c.Pid, root);
                         if (!match || pastMatch) queue.Enqueue(c.Pid);
                     }
+            }
         }
     }
 
-    public DateTime? StartedAt(int pid)
-    {
-        try { using var p = Process.GetProcessById(pid); return p.StartTime.ToUniversalTime(); }
-        catch { return null; }   // gone, or another account's
-    }
+    public DateTime? StartedAt(int pid) => Proc.StartedAt(pid);
 
     public string ImagePath(int pid) => Proc.ImagePath(pid);
 
